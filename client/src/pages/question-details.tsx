@@ -1,73 +1,14 @@
 import { useState } from "react";
 import { useRoute, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { CodeEditor } from "@/components/code-editor";
+import { AddApproachDialog } from "@/components/add-approach-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ArrowLeft, ExternalLink, Edit, Plus } from "lucide-react";
-
-//todo: remove mock functionality
-const mockQuestion = {
-  id: "1",
-  title: "Two Sum",
-  platform: "LeetCode",
-  difficulty: "Easy" as const,
-  tags: ["Array", "Hash Table"],
-  link: "https://leetcode.com/problems/two-sum",
-  notes: "Remember to use a hash map for O(n) time complexity. The key insight is to store complements as we iterate.",
-  approaches: [
-    {
-      id: "1",
-      name: "Hash Map Approach",
-      language: "Python",
-      code: `def twoSum(nums, target):
-    seen = {}
-    
-    for i, num in enumerate(nums):
-        complement = target - num
-        
-        if complement in seen:
-            return [seen[complement], i]
-        
-        seen[num] = i
-    
-    return []`,
-    },
-    {
-      id: "2",
-      name: "Two Pointers (Sorted)",
-      language: "JavaScript",
-      code: `function twoSum(nums, target) {
-  const indexed = nums.map((num, i) => [num, i]);
-  indexed.sort((a, b) => a[0] - b[0]);
-  
-  let left = 0, right = nums.length - 1;
-  
-  while (left < right) {
-    const sum = indexed[left][0] + indexed[right][0];
-    
-    if (sum === target) {
-      return [indexed[left][1], indexed[right][1]];
-    } else if (sum < target) {
-      left++;
-    } else {
-      right--;
-    }
-  }
-  
-  return [];
-}`,
-    },
-  ],
-};
+import type { QuestionWithDetails } from "@shared/schema";
 
 const difficultyColors = {
   Easy: "bg-green-500/10 text-green-600 dark:text-green-400",
@@ -78,11 +19,33 @@ const difficultyColors = {
 export default function QuestionDetails() {
   const [, params] = useRoute("/questions/:id");
   const [, setLocation] = useLocation();
-  const [selectedApproach, setSelectedApproach] = useState("1");
-  const [language, setLanguage] = useState("python");
+  const [selectedApproach, setSelectedApproach] = useState<string | null>(null);
+  const [addApproachOpen, setAddApproachOpen] = useState(false);
 
-  const currentApproach = mockQuestion.approaches.find(
-    (a) => a.id === selectedApproach
+  const { data: question, isLoading } = useQuery<QuestionWithDetails>({
+    queryKey: ["/api/questions", params?.id],
+    enabled: !!params?.id,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <div className="text-center">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!question) {
+    return (
+      <div className="p-6">
+        <div className="text-center">Question not found</div>
+      </div>
+    );
+  }
+
+  const currentApproachId = selectedApproach || question.approaches[0]?.id?.toString();
+  const currentApproach = question.approaches.find(
+    (a) => a.id?.toString() === currentApproachId
   );
 
   return (
@@ -98,32 +61,37 @@ export default function QuestionDetails() {
       </Button>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* LEFT SIDE - Question Details */}
         <div className="space-y-4">
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <CardTitle className="text-2xl mb-3">
-                    {mockQuestion.title}
+                    {question.title}
                   </CardTitle>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="secondary">{mockQuestion.platform}</Badge>
+                    <Badge variant="secondary">{question.platform}</Badge>
                     <Badge
-                      className={difficultyColors[mockQuestion.difficulty]}
+                      className={
+                        difficultyColors[question.difficulty as keyof typeof difficultyColors]
+                      }
                     >
-                      {mockQuestion.difficulty}
+                      {question.difficulty}
                     </Badge>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => window.open(mockQuestion.link, "_blank")}
-                    data-testid="button-open-link"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
+                  {question.link && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => window.open(question.link || "", "_blank")}
+                      data-testid="button-open-link"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -140,7 +108,7 @@ export default function QuestionDetails() {
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Tags</h3>
                   <div className="flex gap-2 flex-wrap">
-                    {mockQuestion.tags.map((tag) => (
+                    {question.tags.map((tag) => (
                       <Badge key={tag} variant="outline">
                         {tag}
                       </Badge>
@@ -148,32 +116,44 @@ export default function QuestionDetails() {
                   </div>
                 </div>
 
-                {mockQuestion.link && (
+                {question.link && (
                   <div>
                     <h3 className="text-sm font-semibold mb-2">Problem Link</h3>
                     <a
-                      href={mockQuestion.link}
+                      href={question.link}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm text-primary hover:underline flex items-center gap-1"
                     >
-                      {mockQuestion.link}
+                      {question.link}
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
                 )}
 
-                <div>
-                  <h3 className="text-sm font-semibold mb-2">Notes</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {mockQuestion.notes}
-                  </p>
-                </div>
+                {question.notes && (
+                  <div>
+                    <h3 className="text-sm font-semibold mb-2">Question Notes</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {question.notes}
+                    </p>
+                  </div>
+                )}
+
+                {currentApproach?.notes && (
+                  <div>
+                    <h3 className="text-sm font-semibold mb-2">Approach Notes</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {currentApproach.notes}
+                    </p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
 
+        {/* RIGHT SIDE - Code Solutions */}
         <div className="space-y-4">
           <Card>
             <CardHeader>
@@ -182,7 +162,7 @@ export default function QuestionDetails() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => console.log("Add approach")}
+                  onClick={() => setAddApproachOpen(true)}
                   data-testid="button-add-approach"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -191,52 +171,57 @@ export default function QuestionDetails() {
               </div>
             </CardHeader>
             <CardContent>
-              <Tabs value={selectedApproach} onValueChange={setSelectedApproach}>
-                <TabsList className="w-full mb-4">
-                  {mockQuestion.approaches.map((approach) => (
-                    <TabsTrigger
-                      key={approach.id}
-                      value={approach.id}
-                      className="flex-1"
-                      data-testid={`tab-approach-${approach.id}`}
-                    >
-                      {approach.name}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
+              {question.approaches.length > 0 ? (
+                <Tabs
+                  value={currentApproachId}
+                  onValueChange={setSelectedApproach}
+                >
+                  <TabsList className="w-full mb-4">
+                    {question.approaches.map((approach) => (
+                      <TabsTrigger
+                        key={approach.id}
+                        value={approach.id.toString()}
+                        className="flex-1"
+                        data-testid={`tab-approach-${approach.id}`}
+                      >
+                        {approach.name}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
 
-                {mockQuestion.approaches.map((approach) => (
-                  <TabsContent key={approach.id} value={approach.id}>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          Language: {approach.language}
-                        </span>
-                        <Select value={language} onValueChange={setLanguage}>
-                          <SelectTrigger className="w-36" data-testid="select-language">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="python">Python</SelectItem>
-                            <SelectItem value="javascript">JavaScript</SelectItem>
-                            <SelectItem value="cpp">C++</SelectItem>
-                            <SelectItem value="java">Java</SelectItem>
-                          </SelectContent>
-                        </Select>
+                  {question.approaches.map((approach) => (
+                    <TabsContent key={approach.id} value={approach.id.toString()}>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            Language: {approach.language}
+                          </span>
+                        </div>
+                        <CodeEditor
+                          value={approach.code}
+                          language={approach.language}
+                          height="500px"
+                          readOnly
+                        />
                       </div>
-                      <CodeEditor
-                        value={approach.code}
-                        language={approach.language}
-                        height="400px"
-                      />
-                    </div>
-                  </TabsContent>
-                ))}
-              </Tabs>
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No solutions added yet. Click "Add Approach" to add one.
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
       </div>
+
+      <AddApproachDialog
+        open={addApproachOpen}
+        onOpenChange={setAddApproachOpen}
+        questionId={parseInt(params?.id || "0")}
+      />
     </div>
   );
 }

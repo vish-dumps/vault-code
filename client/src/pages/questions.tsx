@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { QuestionCard } from "@/components/question-card";
+import { AddQuestionDialog } from "@/components/add-question-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,53 +13,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search, Plus } from "lucide-react";
-
-//todo: remove mock functionality
-const mockQuestions = [
-  {
-    id: "1",
-    title: "Two Sum",
-    platform: "LeetCode",
-    difficulty: "Easy" as const,
-    tags: ["Array", "Hash Table"],
-    language: "Python",
-    link: "https://leetcode.com/problems/two-sum",
-  },
-  {
-    id: "2",
-    title: "Longest Palindromic Substring",
-    platform: "LeetCode",
-    difficulty: "Medium" as const,
-    tags: ["String", "Dynamic Programming"],
-    language: "C++",
-    link: "https://leetcode.com/problems/longest-palindromic-substring",
-  },
-  {
-    id: "3",
-    title: "Median of Two Sorted Arrays",
-    platform: "LeetCode",
-    difficulty: "Hard" as const,
-    tags: ["Array", "Binary Search", "Divide and Conquer"],
-    language: "Java",
-    link: "https://leetcode.com",
-  },
-  {
-    id: "4",
-    title: "Valid Parentheses",
-    platform: "LeetCode",
-    difficulty: "Easy" as const,
-    tags: ["String", "Stack"],
-    language: "JavaScript",
-    link: "https://leetcode.com",
-  },
-];
+import type { QuestionWithDetails } from "@shared/schema";
 
 export default function Questions() {
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState("all");
+  const [addQuestionOpen, setAddQuestionOpen] = useState(false);
 
-  const filteredQuestions = mockQuestions.filter((q) => {
+  const { data: questions = [], isLoading } = useQuery<QuestionWithDetails[]>({
+    queryKey: ["/api/questions"],
+  });
+
+  const filteredQuestions = questions.filter((q) => {
     const matchesSearch = q.title.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDifficulty =
       difficultyFilter === "all" || q.difficulty === difficultyFilter;
@@ -73,7 +41,10 @@ export default function Questions() {
             Your saved coding problems
           </p>
         </div>
-        <Button onClick={() => console.log("Add question")} data-testid="button-add-question">
+        <Button 
+          onClick={() => setAddQuestionOpen(true)} 
+          data-testid="button-add-question"
+        >
           <Plus className="h-4 w-4 mr-2" />
           Add Question
         </Button>
@@ -103,23 +74,40 @@ export default function Questions() {
         </Select>
       </div>
 
-      <div className="space-y-3">
-        {filteredQuestions.map((question) => (
-          <QuestionCard
-            key={question.id}
-            {...question}
-            onEdit={(id) => console.log("Edit", id)}
-            onDelete={(id) => console.log("Delete", id)}
-            onClick={(id) => setLocation(`/questions/${id}`)}
-          />
-        ))}
-      </div>
+      {isLoading ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Loading questions...</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredQuestions.map((question) => (
+            <QuestionCard
+              key={question.id}
+              id={question.id.toString()}
+              title={question.title}
+              platform={question.platform}
+              difficulty={question.difficulty as "Easy" | "Medium" | "Hard"}
+              tags={question.tags}
+              language={question.approaches[0]?.language || "N/A"}
+              link={question.link || undefined}
+              onEdit={(id) => console.log("Edit", id)}
+              onDelete={(id) => console.log("Delete", id)}
+              onClick={(id) => setLocation(`/questions/${id}`)}
+            />
+          ))}
+        </div>
+      )}
 
-      {filteredQuestions.length === 0 && (
+      {filteredQuestions.length === 0 && !isLoading && (
         <div className="text-center py-12">
           <p className="text-muted-foreground">No questions found</p>
         </div>
       )}
+
+      <AddQuestionDialog
+        open={addQuestionOpen}
+        onOpenChange={setAddQuestionOpen}
+      />
     </div>
   );
 }
