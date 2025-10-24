@@ -4,6 +4,14 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 export default defineConfig({
+  server: {
+    host: true,
+    port: 5173,
+    onListening: (server: { resolvedUrls?: { local?: string[] } }) => {
+      const addresses = server.resolvedUrls?.local?.map((url: string) => `\n    ${url}`).join('') || '';
+      console.log('\n  🚀 Frontend is running at:', addresses, '\n');
+    },
+  },
   plugins: [
     react(),
     runtimeErrorOverlay(),
