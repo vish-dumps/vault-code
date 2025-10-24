@@ -1,0 +1,172 @@
+{
+  "project_name": "CodeVault",
+  "goal": "Build a full-stack MERN web application called CodeVault — a personal coding companion platform that helps users track DSA progress, save solved problems, write and store code snippets with notes, select programming languages for saved code, and view upcoming coding contests. The app should be visually clean, dark-themed, and feel like a VS Code environment. Special focus should be on making the Question Vault user-friendly, intuitive, and inspired by LeetCode's solving dashboard.",
+  "tech_stack": {
+    "frontend": [
+      "React (with Vite)",
+      "Tailwind CSS",
+      "Axios",
+      "Recharts (for charts)",
+      "Monaco Editor (for code editing with language support)"
+    ],
+    "backend": [
+      "Node.js",
+      "Express.js",
+      "MongoDB with Mongoose",
+      "JWT for authentication"
+    ],
+    "database": "MongoDB Atlas",
+    "hosting": {
+      "frontend": "Vercel",
+      "backend": "Render or Railway"
+    }
+  },
+  "features": {
+    "auth_and_profile": [
+      "User registration and login using JWT",
+      "Profile page to connect LeetCode and Codeforces usernames",
+      "Streak and topic progress tracking"
+    ],
+    "dashboard": [
+      "Cards showing total problems solved, streak, and top topic",
+      "Chart for topic-wise stats using Recharts",
+      "List of upcoming contests from Codeforces and LeetCode",
+      "Small fixed button at bottom corner to directly add a question to the Question Vault"
+    ],
+    "workspace": [
+      "VS Code-like code editor using Monaco Editor",
+      "Save, edit, and delete code snippets",
+      "Choose programming language (C++, Python, Java, JavaScript, etc.) when saving a code snippet for proper syntax highlighting",
+      "Add personal notes for each code snippet",
+      "Dark mode default with light mode toggle",
+      "Optional: code version history and snippet tagging by topic"
+    ],
+    "question_vault": [
+      "Save solved problems with title, link, platform, tags, difficulty, code snippet, language, and notes",
+      "User-friendly layout inspired by LeetCode solving dashboard: code displayed on the RIGHT, question details (title, link, difficulty, platform, notes) on the LEFT",
+      "Feature to add multiple approaches per question, with a toggle to switch between approaches",
+      "Search and filter by topic, difficulty, or programming language",
+      "Edit and delete saved questions",
+      "Clicking on a question opens a detailed dashboard to view saved code and all related metadata at a glance"
+    ],
+    "contest_tracker": [
+      "Fetch and display upcoming contests using public APIs (Codeforces + LeetCode/Kontests)",
+      "Show contest name, date, and platform"
+    ]
+  },
+  "api_endpoints": {
+    "auth": {
+      "POST /api/auth/register": "Register a new user",
+      "POST /api/auth/login": "Login and return JWT token"
+    },
+    "user": {
+      "GET /api/user/profile": "Fetch logged-in user profile",
+      "PUT /api/user/update": "Update LeetCode/Codeforces usernames"
+    },
+    "questions": {
+      "GET /api/questions": "Fetch all saved questions for a user",
+      "POST /api/questions": "Add a new question including code, language, notes, and multiple approaches",
+      "PUT /api/questions/:id": "Update code, language, notes, or approaches for a question",
+      "DELETE /api/questions/:id": "Delete a question"
+    },
+    "contests": {
+      "GET /api/contests": "Fetch upcoming contests from external APIs"
+    }
+  },
+  "database_schema": {
+    "User": {
+      "name": "String",
+      "email": "String (unique)",
+      "password": "String",
+      "leetcodeUsername": "String",
+      "codeforcesUsername": "String",
+      "streak": "Number",
+      "topicsProgress": {
+        "arrays": "Number",
+        "dp": "Number",
+        "graphs": "Number",
+        "strings": "Number"
+      }
+    },
+    "Question": {
+      "userId": "ObjectId (ref: User)",
+      "title": "String",
+      "platform": "String",
+      "link": "String",
+      "code": "String",
+      "language": "String (e.g., 'C++', 'Python', 'Java', 'JavaScript')",
+      "notes": "String",
+      "tags": "Array of Strings",
+      "difficulty": "Enum [Easy, Medium, Hard]",
+      "approaches": [
+        {
+          "code": "String",
+          "language": "String",
+          "notes": "String"
+        }
+      ],
+      "dateSaved": "Date"
+    }
+  },
+  "frontend_structure": {
+    "folders": {
+      "components": ["Navbar.jsx", "Sidebar.jsx", "QuestionCard.jsx", "CodeEditor.jsx", "QuestionVault.jsx", "ApproachToggle.jsx"],
+      "pages": ["Dashboard.jsx", "Questions.jsx", "Workspace.jsx", "Login.jsx", "QuestionDetails.jsx"],
+      "context": ["AuthContext.jsx"],
+      "utils": ["api.js"]
+    },
+    "design": {
+      "theme": "Dark (default)",
+      "layout": "Sidebar navigation with clean dashboard layout; Question Vault dashboard splits question details (left) and code (right) like LeetCode solving view",
+      "responsive": true,
+      "font": "Inter or similar modern sans-serif"
+    }
+  },
+  "backend_structure": {
+    "folders": {
+      "config": ["db.js", "env.js"],
+      "controllers": ["authController.js", "userController.js", "questionController.js", "contestController.js"],
+      "models": ["User.js", "Question.js"],
+      "middleware": ["authMiddleware.js"],
+      "routes": ["authRoutes.js", "userRoutes.js", "questionRoutes.js", "contestRoutes.js"]
+    },
+    "entry_file": "server.js",
+    "notes": "Use async/await, proper error handling, and RESTful API conventions"
+  },
+  "authentication": {
+    "method": "JWT (JSON Web Token)",
+    "storage": "Store token in localStorage",
+    "middleware": "authMiddleware.js verifies token and attaches user to request"
+  },
+  "contest_api_sources": [
+    "https://codeforces.com/api/contest.list",
+    "https://kontests.net/api/v1/all"
+  ],
+  "quality_guidelines": [
+    "Use modular, reusable components",
+    "Handle async operations with try/catch",
+    "Implement proper loading and error states in the UI",
+    "Follow RESTful conventions",
+    "Store secrets in .env file"
+  ],
+  "env_template": {
+    "MONGO_URI": "mongodb+srv://vishwaszsoni_db_user:<db_password>@code-hive-db.i3tpnwc.mongodb.net/?appName=code-hive-db",
+    "JWT_SECRET": "Your JWT Secret Key",
+    "PORT": "5000"
+  },
+  "build_steps": [
+    "1. cd server && npm install",
+    "2. cd client && npm install",
+    "3. Create .env file with MongoDB URI, JWT secret, and port",
+    "4. Run backend with npm run dev (nodemon)",
+    "5. Run frontend with npm run dev (Vite)",
+    "6. Access app at http://localhost:5173"
+  ],
+  "stretch_goals": [
+    "Add AI summarization of saved code",
+    "Add Chrome extension for quick save from LeetCode",
+    "Add revision reminders for older problems",
+    "Implement version history for code changes"
+  ],
+  "final_instruction": "Generate the complete codebase for the described project. Start with backend scaffolding (Express + MongoDB), then build the frontend using React and Tailwind CSS. Implement authentication, CRUD for questions with multiple approaches, language selection, code editor integration, Question Vault dashboard with question details on the LEFT and code on the RIGHT, and contest API fetching. The final output should be a functional MERN app ready to run locally and deploy."
+}
