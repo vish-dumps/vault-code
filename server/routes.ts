@@ -6,6 +6,7 @@ import {
   updateQuestionSchema,
   insertApproachSchema,
   updateApproachSchema,
+  insertSnippetSchema,
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -232,6 +233,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching topic progress:", error);
       res.status(500).json({ error: "Failed to fetch topics" });
+    }
+  });
+
+  // Snippet routes
+  app.get("/api/snippets", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const snippets = await storage.getSnippets(userId);
+      res.json(snippets);
+    } catch (error) {
+      console.error("Error fetching snippets:", error);
+      res.status(500).json({ error: "Failed to fetch snippets" });
+    }
+  });
+
+  // Snippet routes
+  app.get("/api/snippets", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const snippets = await storage.getSnippets(userId);
+      res.json(snippets);
+    } catch (error) {
+      console.error("Error fetching snippets:", error);
+      res.status(500).json({ error: "Failed to fetch snippets" });
+    }
+  });
+
+  app.post("/api/snippets", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const data = insertSnippetSchema.parse(req.body);
+      const snippet = await storage.createSnippet(data, userId);
+      res.status(201).json(snippet);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      console.error("Error creating snippet:", error);
+      res.status(500).json({ error: "Failed to create snippet" });
+    }
+  });
+
+  app.delete("/api/snippets/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteSnippet(id, userId);
+      if (!success) {
+        return res.status(404).json({ error: "Snippet not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting snippet:", error);
+      res.status(500).json({ error: "Failed to delete snippet" });
     }
   });
 

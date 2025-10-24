@@ -9,8 +9,10 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/app-sidebar";
 import Dashboard from "@/pages/dashboard";
 import Questions from "@/pages/questions";
+import AddQuestion from "@/pages/add-question";
 import QuestionDetails from "@/pages/question-details";
 import Workspace from "@/pages/workspace";
+import Snippets from "@/pages/snippets";
 import Contests from "@/pages/contests";
 import Profile from "@/pages/profile";
 import Login from "@/pages/login";
@@ -21,7 +23,9 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/workspace" component={Workspace} />
+      <Route path="/snippets" component={Snippets} />
       <Route path="/questions" component={Questions} />
+      <Route path="/questions/add" component={AddQuestion} />
       <Route path="/questions/:id" component={QuestionDetails} />
       <Route path="/contests" component={Contests} />
       <Route path="/profile" component={Profile} />

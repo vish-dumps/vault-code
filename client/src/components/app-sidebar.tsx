@@ -1,4 +1,4 @@
-import { Home, Code2, BookMarked, Trophy, User, LogOut } from "lucide-react";
+import { Home, Code2, BookMarked, Trophy, User, LogOut, FileCode } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -23,6 +23,11 @@ const menuItems = [
     title: "Workspace",
     url: "/workspace",
     icon: Code2,
+  },
+  {
+    title: "Snippets",
+    url: "/snippets",
+    icon: FileCode,
   },
   {
     title: "Question Vault",

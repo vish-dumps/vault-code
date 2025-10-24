@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { QuestionCard } from "@/components/question-card";
-import { AddQuestionDialog } from "@/components/add-question-dialog";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,7 +19,6 @@ export default function Questions() {
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState("all");
-  const [addQuestionOpen, setAddQuestionOpen] = useState(false);
 
   const { data: questions = [], isLoading } = useQuery<QuestionWithDetails[]>({
     queryKey: ["/api/questions"],
@@ -42,7 +41,7 @@ export default function Questions() {
           </p>
         </div>
         <Button 
-          onClick={() => setAddQuestionOpen(true)} 
+          onClick={() => setLocation("/questions/add")} 
           data-testid="button-add-question"
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -104,10 +103,7 @@ export default function Questions() {
         </div>
       )}
 
-      <AddQuestionDialog
-        open={addQuestionOpen}
-        onOpenChange={setAddQuestionOpen}
-      />
+
     </div>
   );
 }

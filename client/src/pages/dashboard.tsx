@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, Flame, TrendingUp, Plus } from "lucide-react";
+import { useLocation } from "wouter";
+import { CheckCircle, Flame, TrendingUp, Plus, FileCode, Code2 } from "lucide-react";
 import { StatsCard } from "@/components/stats-card";
 import { TopicChart } from "@/components/topic-chart";
 import { ContestList } from "@/components/contest-list";
-import { AddQuestionDialog } from "@/components/add-question-dialog";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { QuestionWithDetails, TopicProgress } from "@shared/schema";
 
@@ -17,7 +18,7 @@ interface Contest {
 }
 
 export default function Dashboard() {
-  const [addQuestionOpen, setAddQuestionOpen] = useState(false);
+  const [, setLocation] = useLocation();
 
   // Fetch questions to calculate stats
   const { data: questions = [] } = useQuery<QuestionWithDetails[]>({
@@ -32,6 +33,11 @@ export default function Dashboard() {
   // Fetch topic progress
   const { data: topicProgress = [] } = useQuery<TopicProgress[]>({
     queryKey: ["/api/topics"],
+  });
+
+  // Fetch snippets count
+  const { data: snippets = [] } = useQuery<any[]>({
+    queryKey: ["/api/snippets"],
   });
 
   // Calculate stats from questions
@@ -63,7 +69,7 @@ export default function Dashboard() {
         <p className="text-muted-foreground mt-1">Track your coding progress</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatsCard
           title="Problems Solved"
           value={totalProblems}
@@ -81,30 +87,57 @@ export default function Dashboard() {
           icon={TrendingUp}
           trend={`${topicProgress.find(t => t.topic === topTopic)?.solved || 0} problems`}
         />
+        <StatsCard
+          title="Code Snippets"
+          value={snippets.length}
+          icon={FileCode}
+          trend="Saved snippets"
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <TopicChart data={chartData} />
-        </div>
-        <div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TopicChart data={chartData} />
+        <div className="space-y-6">
           <ContestList contests={contests} />
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Code2 className="h-5 w-5" />
+                Quick Actions
+              </CardTitle>
+              <CardDescription>
+                Jump to your most used features
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button
+                className="w-full justify-start"
+                variant="outline"
+                onClick={() => setLocation("/workspace")}
+              >
+                <Code2 className="h-4 w-4 mr-2" />
+                Create New Snippet
+              </Button>
+              <Button
+                className="w-full justify-start"
+                variant="outline"
+                onClick={() => setLocation("/snippets")}
+              >
+                <FileCode className="h-4 w-4 mr-2" />
+                View All Snippets
+              </Button>
+              <Button
+                className="w-full justify-start"
+                variant="outline"
+                onClick={() => setLocation("/questions/add")}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add New Question
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
-
-      <Button
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg"
-        size="icon"
-        onClick={() => setAddQuestionOpen(true)}
-        data-testid="button-quick-add"
-      >
-        <Plus className="h-6 w-6" />
-      </Button>
-
-      <AddQuestionDialog
-        open={addQuestionOpen}
-        onOpenChange={setAddQuestionOpen}
-      />
     </div>
   );
 }

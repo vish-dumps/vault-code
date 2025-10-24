@@ -48,6 +48,16 @@ export const topicProgress = pgTable("topic_progress", {
   solved: integer("solved").default(0),
 });
 
+export const snippets = pgTable("snippets", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  language: text("language").notNull(),
+  code: text("code").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -74,6 +84,12 @@ export const insertApproachSchema = createInsertSchema(approaches).omit({
   questionId: true,
 });
 
+export const insertSnippetSchema = createInsertSchema(snippets).omit({
+  id: true,
+  createdAt: true,
+  userId: true,
+});
+
 export const updateQuestionSchema = insertQuestionSchema.partial();
 export const updateApproachSchema = insertApproachSchema.partial();
 
@@ -91,6 +107,9 @@ export type UpdateApproach = z.infer<typeof updateApproachSchema>;
 
 export type Tag = typeof tags.$inferSelect;
 export type TopicProgress = typeof topicProgress.$inferSelect;
+
+export type Snippet = typeof snippets.$inferSelect;
+export type InsertSnippet = z.infer<typeof insertSnippetSchema>;
 
 // Extended types for frontend
 export type QuestionWithDetails = Question & {

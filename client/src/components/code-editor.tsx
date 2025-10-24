@@ -8,6 +8,7 @@ interface CodeEditorProps {
   onChange?: (value: string | undefined) => void;
   readOnly?: boolean;
   height?: string;
+  className?: string;
 }
 
 export function CodeEditor({
@@ -15,12 +16,12 @@ export function CodeEditor({
   language,
   onChange,
   readOnly = false,
-  height = "500px",
+  height = "calc(100vh - 200px)",
 }: CodeEditorProps) {
   const { theme } = useTheme();
 
   return (
-    <Card className="overflow-hidden" data-testid="code-editor">
+    <Card className="h-full overflow-hidden flex flex-col" data-testid="code-editor">
       <Editor
         height={height}
         language={language.toLowerCase()}
@@ -34,6 +35,15 @@ export function CodeEditor({
           readOnly,
           scrollBeyondLastLine: false,
           automaticLayout: true,
+          cursorBlinking: "smooth",
+          cursorSmoothCaretAnimation: "on",
+          cursorStyle: "line",
+          letterSpacing: 0,
+          lineHeight: 1.4,
+          fontLigatures: true,
+          renderWhitespace: "selection",
+          wordWrap: "on",
+          wrappingIndent: "indent",
         }}
       />
     </Card>

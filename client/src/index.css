@@ -333,4 +333,17 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+
+  /* Monaco Editor cursor positioning fixes */
+  .monaco-editor .cursor {
+    position: relative !important;
+  }
+  
+  .monaco-editor .view-lines {
+    font-feature-settings: "liga" 1, "calt" 1;
+  }
+  
+  .monaco-editor .view-line {
+    font-feature-settings: "liga" 1, "calt" 1;
+  }
 }

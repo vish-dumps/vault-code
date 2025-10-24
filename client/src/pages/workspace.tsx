@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CodeEditor } from "@/components/code-editor";
+import { codeTemplates } from "@/lib/codeTemplates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,22 +14,57 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Save, FileCode } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Workspace() {
-  const [code, setCode] = useState(
-    `// Start coding here...
-
-function example() {
-  console.log("Hello, CodeVault!");
-}`
-  );
   const [language, setLanguage] = useState("javascript");
+  const [code, setCode] = useState(codeTemplates[language]);
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
+  const { toast } = useToast();
 
-  const handleSave = () => {
-    console.log("Saving snippet:", { title, language, code, notes });
-    // todo: remove mock functionality - replace with actual save
+  useEffect(() => {
+    // Only update code if it's empty or matches a template
+    if (!code || Object.values(codeTemplates).includes(code)) {
+      setCode(codeTemplates[language]);
+    }
+  }, [language]);
+
+  const handleSave = async () => {
+    if (!title.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a title for the snippet",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/snippets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, language, code, notes }),
+      });
+      if (!response.ok) throw new Error("Failed to save snippet");
+      
+      toast({
+        title: "Success",
+        description: "Snippet saved successfully!",
+      });
+      
+      // Clear the form
+      setTitle("");
+      setCode(codeTemplates[language]);
+      setNotes("");
+    } catch (error) {
+      console.error("Failed to save snippet:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save snippet. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -66,7 +102,7 @@ function example() {
             value={code}
             language={language}
             onChange={(value) => setCode(value || "")}
-            height="calc(100vh - 300px)"
+            height="calc(100vh - 200px)"
           />
         </div>
 

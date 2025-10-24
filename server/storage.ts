@@ -9,6 +9,8 @@ import {
   type UpdateApproach,
   type QuestionWithDetails,
   type TopicProgress,
+  type Snippet,
+  type InsertSnippet,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -34,6 +36,11 @@ export interface IStorage {
   // Topic progress
   getTopicProgress(userId: string): Promise<TopicProgress[]>;
   updateTopicProgress(userId: string, topic: string, increment: number): Promise<void>;
+
+  // Snippet operations
+  getSnippets(userId: string): Promise<Snippet[]>;
+  createSnippet(snippet: InsertSnippet, userId: string): Promise<Snippet>;
+  deleteSnippet(id: number, userId: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -42,8 +49,10 @@ export class MemStorage implements IStorage {
   private approaches: Map<number, Approach>;
   private tags: Map<number, string[]>;
   private topicProgress: Map<string, TopicProgress[]>;
+  private snippets: Map<number, Snippet>;
   private questionIdCounter: number;
   private approachIdCounter: number;
+  private snippetIdCounter: number;
 
   constructor() {
     this.users = new Map();
@@ -51,8 +60,10 @@ export class MemStorage implements IStorage {
     this.approaches = new Map();
     this.tags = new Map();
     this.topicProgress = new Map();
+    this.snippets = new Map();
     this.questionIdCounter = 1;
     this.approachIdCounter = 1;
+    this.snippetIdCounter = 1;
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -295,6 +306,36 @@ export class MemStorage implements IStorage {
     }
 
     this.topicProgress.set(userId, progress);
+  }
+
+  async getSnippets(userId: string): Promise<Snippet[]> {
+    return Array.from(this.snippets.values()).filter(
+      (s) => s.userId === userId
+    );
+  }
+
+  async createSnippet(insertSnippet: InsertSnippet, userId: string): Promise<Snippet> {
+    const id = this.snippetIdCounter++;
+    const snippet: Snippet = {
+      id,
+      userId,
+      title: insertSnippet.title,
+      language: insertSnippet.language,
+      code: insertSnippet.code,
+      notes: insertSnippet.notes || null,
+      createdAt: new Date(),
+    };
+
+    this.snippets.set(id, snippet);
+    return snippet;
+  }
+
+  async deleteSnippet(id: number, userId: string): Promise<boolean> {
+    const snippet = this.snippets.get(id);
+    if (!snippet || snippet.userId !== userId) {
+      return false;
+    }
+    return this.snippets.delete(id);
   }
 }
 
