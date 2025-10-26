@@ -1,7 +1,10 @@
+import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seedDummyData } from "./seedData";
+import { connectToMongoDB } from "./mongodb";
+import authRoutes from "./auth-routes";
 
 const app = express();
 
@@ -16,6 +19,22 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: false }));
+
+// Add CORS middleware for development
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
+// Auth routes (no authentication required)
+app.use('/api/auth', authRoutes);
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -48,7 +67,10 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Seed dummy data on startup
+  // Connect to MongoDB
+  await connectToMongoDB();
+  
+  // Seed dummy data on startup (only if no users exist)
   await seedDummyData();
   
   const server = await registerRoutes(app);

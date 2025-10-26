@@ -1,12 +1,21 @@
-import { storage } from './storage';
+import { mongoStorage } from './mongodb-storage';
+import { connectToMongoDB } from './mongodb';
 
 export async function seedDummyData() {
   console.log('🌱 Seeding dummy data...');
 
+  // Check if any users already exist
+  const existingUser = await mongoStorage.getUserByUsername('demo-user');
+  if (existingUser) {
+    console.log('✅ Demo user already exists, skipping seed data');
+    return;
+  }
+
   // Create a default user
-  const user = await storage.createUser({
+  const user = await mongoStorage.createUser({
     username: 'demo-user',
     email: 'demo@example.com',
+    password: 'CodeVault2024!', // This will be hashed by the User model
     name: 'Demo User',
     leetcodeUsername: 'demo_leetcode',
     codeforcesUsername: 'demo_codeforces',
@@ -26,7 +35,7 @@ export async function seedDummyData() {
       approaches: [
         {
           name: 'Hash Map Approach',
-          language: 'JavaScript',
+          language: 'javascript',
           code: `function twoSum(nums, target) {
   const map = new Map();
   
@@ -67,7 +76,7 @@ export async function seedDummyData() {
       approaches: [
         {
           name: 'Stack Solution',
-          language: 'JavaScript',
+          language: 'javascript',
           code: `function isValid(s) {
   const stack = [];
   const pairs = {
@@ -119,7 +128,7 @@ export async function seedDummyData() {
         },
         {
           name: 'Iterative with Stack',
-          language: 'JavaScript',
+          language: 'javascript',
           code: `function inorderTraversal(root) {
   const result = [];
   const stack = [];
@@ -192,7 +201,7 @@ export async function seedDummyData() {
         },
         {
           name: 'Space Optimized',
-          language: 'JavaScript',
+          language: 'javascript',
           code: `function longestCommonSubsequence(text1, text2) {
   const m = text1.length;
   const n = text2.length;
@@ -220,17 +229,17 @@ export async function seedDummyData() {
 
   // Create questions
   for (const questionData of sampleQuestions) {
-    const question = await storage.createQuestion(questionData, user.id);
+    const question = await mongoStorage.createQuestion(questionData, user.id);
     console.log(`✅ Created question: ${question.title}`);
   }
 
   // Update topic progress
-  await storage.updateTopicProgress(user.id, 'Array', 2);
-  await storage.updateTopicProgress(user.id, 'Hash Table', 1);
-  await storage.updateTopicProgress(user.id, 'String', 1);
-  await storage.updateTopicProgress(user.id, 'Stack', 2);
-  await storage.updateTopicProgress(user.id, 'Tree', 1);
-  await storage.updateTopicProgress(user.id, 'Dynamic Programming', 2);
+  await mongoStorage.updateTopicProgress(user.id, 'Array', 2);
+  await mongoStorage.updateTopicProgress(user.id, 'Hash Table', 1);
+  await mongoStorage.updateTopicProgress(user.id, 'String', 1);
+  await mongoStorage.updateTopicProgress(user.id, 'Stack', 2);
+  await mongoStorage.updateTopicProgress(user.id, 'Tree', 1);
+  await mongoStorage.updateTopicProgress(user.id, 'Dynamic Programming', 2);
 
   console.log('🎉 Dummy data seeded successfully!');
   console.log(`📊 Created ${sampleQuestions.length} questions with multiple approaches`);

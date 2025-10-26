@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Trash2, Code2, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,15 +37,16 @@ export default function Snippets() {
 
   const { data: snippets = [], isLoading } = useQuery<Snippet[]>({
     queryKey: ["/api/snippets"],
+    queryFn: async () => {
+      const response = await fetch("/api/snippets");
+      if (!response.ok) throw new Error("Failed to fetch snippets");
+      return response.json();
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await fetch(`/api/snippets/${id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) throw new Error("Failed to delete snippet");
-      return response.json();
+      await apiRequest("DELETE", `/api/snippets/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/snippets"] });

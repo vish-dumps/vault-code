@@ -7,7 +7,7 @@ import { TagInput } from "@/components/tag-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useMutation } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 
 export default function AddQuestion() {
   const [, setLocation] = useLocation();
@@ -22,12 +22,7 @@ export default function AddQuestion() {
 
   const addQuestion = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch("/api/questions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) throw new Error("Failed to add question");
+      const response = await apiRequest("POST", "/api/questions", data);
       return response.json();
     },
     onSuccess: () => {

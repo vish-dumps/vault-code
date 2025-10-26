@@ -12,6 +12,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 const menuItems = [
   {
@@ -48,6 +49,12 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { logout, user } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    window.location.href = '/auth';
+  };
 
   return (
     <Sidebar>
@@ -77,11 +84,14 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="p-4">
+        <div className="mb-2 text-sm text-muted-foreground">
+          {user?.name || user?.username}
+        </div>
         <Button
           variant="ghost"
           className="w-full justify-start"
           data-testid="button-logout"
-          onClick={() => console.log("Logout triggered")}
+          onClick={handleLogout}
         >
           <LogOut className="h-4 w-4 mr-2" />
           Logout

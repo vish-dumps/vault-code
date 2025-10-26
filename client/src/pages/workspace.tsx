@@ -15,6 +15,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Save, FileCode } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Workspace() {
   const [language, setLanguage] = useState("javascript");
@@ -41,12 +42,7 @@ export default function Workspace() {
     }
 
     try {
-      const response = await fetch("/api/snippets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, language, code, notes }),
-      });
-      if (!response.ok) throw new Error("Failed to save snippet");
+      await apiRequest("POST", "/api/snippets", { title, language, code, notes });
       
       toast({
         title: "Success",
