@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { QuestionCard } from "@/components/question-card";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -17,18 +20,40 @@ import type { QuestionWithDetails } from "@shared/schema";
 
 export default function Questions() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState("all");
+  const [tagFilter, setTagFilter] = useState("");
 
   const { data: questions = [], isLoading } = useQuery<QuestionWithDetails[]>({
     queryKey: ["/api/questions"],
   });
 
+  // Delete question mutation
+  const deleteQuestionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/questions/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
+      toast({ title: "Success", description: "Question deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete question", variant: "destructive" });
+    },
+  });
+
+  // Get all unique tags from questions
+  const allTags = Array.from(new Set(questions.flatMap(q => q.tags || [])));
+
   const filteredQuestions = questions.filter((q) => {
     const matchesSearch = q.title.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDifficulty =
       difficultyFilter === "all" || q.difficulty === difficultyFilter;
-    return matchesSearch && matchesDifficulty;
+    const matchesTag = !tagFilter || q.tags?.some(tag => 
+      tag.toLowerCase().includes(tagFilter.toLowerCase())
+    );
+    return matchesSearch && matchesDifficulty && matchesTag;
   });
 
   return (
@@ -60,6 +85,13 @@ export default function Questions() {
             data-testid="input-search-questions"
           />
         </div>
+        <Input
+          placeholder="Filter by tag..."
+          value={tagFilter}
+          onChange={(e) => setTagFilter(e.target.value)}
+          className="w-full sm:w-48"
+          data-testid="input-tag-filter"
+        />
         <Select value={difficultyFilter} onValueChange={setDifficultyFilter}>
           <SelectTrigger className="w-full sm:w-48" data-testid="select-difficulty-filter">
             <SelectValue placeholder="Filter by difficulty" />
@@ -72,6 +104,18 @@ export default function Questions() {
           </SelectContent>
         </Select>
       </div>
+
+      {tagFilter && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Filtering by tag:</span>
+          <Badge variant="secondary" className="gap-1">
+            {tagFilter}
+            <button onClick={() => setTagFilter("")} className="ml-1 hover:text-destructive">
+              ×
+            </button>
+          </Badge>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="text-center py-12">
@@ -89,8 +133,8 @@ export default function Questions() {
               tags={question.tags}
               language={question.approaches[0]?.language || "N/A"}
               link={question.link || undefined}
-              onEdit={(id) => console.log("Edit", id)}
-              onDelete={(id) => console.log("Delete", id)}
+              onEdit={(id) => setLocation(`/questions/${id}`)}
+              onDelete={(id) => deleteQuestionMutation.mutate(id)}
               onClick={(id) => setLocation(`/questions/${id}`)}
             />
           ))}

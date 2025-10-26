@@ -10,6 +10,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { authenticateToken, getUserId, AuthRequest } from "./auth";
+import { Todo } from "./models/Todo";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Apply authentication middleware to all API routes
@@ -265,6 +266,176 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting snippet:", error);
       res.status(500).json({ error: "Failed to delete snippet" });
+    }
+  });
+
+  // Todo routes
+  app.get("/api/todos", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const todos = await Todo.find({ userId }).sort({ createdAt: -1 });
+      res.json(todos.map(todo => ({
+        id: todo._id.toString(),
+        title: todo.title,
+        completed: todo.completed,
+        createdAt: todo.createdAt,
+        completedAt: todo.completedAt
+      })));
+    } catch (error) {
+      console.error("Error fetching todos:", error);
+      res.status(500).json({ error: "Failed to fetch todos" });
+    }
+  });
+
+  app.post("/api/todos", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const { title } = req.body;
+      
+      if (!title || !title.trim()) {
+        return res.status(400).json({ error: "Title is required" });
+      }
+
+      const todo = new Todo({
+        userId,
+        title: title.trim(),
+        completed: false
+      });
+      
+      await todo.save();
+      
+      res.status(201).json({
+        id: todo._id.toString(),
+        title: todo.title,
+        completed: todo.completed,
+        createdAt: todo.createdAt
+      });
+    } catch (error) {
+      console.error("Error creating todo:", error);
+      res.status(500).json({ error: "Failed to create todo" });
+    }
+  });
+
+  app.patch("/api/todos/:id", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const { id } = req.params;
+      const { completed } = req.body;
+
+      const todo = await Todo.findOneAndUpdate(
+        { _id: id, userId },
+        { 
+          completed,
+          completedAt: completed ? new Date() : undefined
+        },
+        { new: true }
+      );
+
+      if (!todo) {
+        return res.status(404).json({ error: "Todo not found" });
+      }
+
+      res.json({
+        id: todo._id.toString(),
+        title: todo.title,
+        completed: todo.completed,
+        createdAt: todo.createdAt,
+        completedAt: todo.completedAt
+      });
+    } catch (error) {
+      console.error("Error updating todo:", error);
+      res.status(500).json({ error: "Failed to update todo" });
+    }
+  });
+
+  app.delete("/api/todos/:id", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const { id } = req.params;
+      
+      const result = await Todo.findOneAndDelete({ _id: id, userId });
+      
+      if (!result) {
+        return res.status(404).json({ error: "Todo not found" });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting todo:", error);
+      res.status(500).json({ error: "Failed to delete todo" });
+    }
+  });
+
+  // Streak update endpoint
+  app.post("/api/user/update-streak", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await mongoStorage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const lastActive = user.lastActiveDate ? new Date(user.lastActiveDate) : null;
+      if (lastActive) {
+        lastActive.setHours(0, 0, 0, 0);
+      }
+
+      let newStreak = user.streak || 0;
+      
+      if (!lastActive) {
+        // First time activity
+        newStreak = 1;
+      } else {
+        const daysDiff = Math.floor((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (daysDiff === 0) {
+          // Same day, no change
+          return res.json({ streak: newStreak });
+        } else if (daysDiff === 1) {
+          // Consecutive day
+          newStreak += 1;
+        } else {
+          // Streak broken
+          newStreak = 1;
+        }
+      }
+
+      await mongoStorage.updateUser(userId, {
+        streak: newStreak,
+        lastActiveDate: new Date()
+      });
+
+      res.json({ streak: newStreak });
+    } catch (error) {
+      console.error("Error updating streak:", error);
+      res.status(500).json({ error: "Failed to update streak" });
+    }
+  });
+
+  // Update goals endpoint
+  app.patch("/api/user/goals", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const { streakGoal, dailyGoal } = req.body;
+      
+      const updateData: any = {};
+      if (streakGoal !== undefined) updateData.streakGoal = streakGoal;
+      if (dailyGoal !== undefined) updateData.dailyGoal = dailyGoal;
+      
+      const user = await mongoStorage.updateUser(userId, updateData);
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      res.json(user);
+    } catch (error) {
+      console.error("Error updating goals:", error);
+      res.status(500).json({ error: "Failed to update goals" });
     }
   });
 

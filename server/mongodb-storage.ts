@@ -254,9 +254,14 @@ export class MongoStorage implements IStorage {
       username: user.username,
       email: user.email,
       name: user.name || null,
+      profileImage: user.profileImage || null,
       leetcodeUsername: user.leetcodeUsername || null,
       codeforcesUsername: user.codeforcesUsername || null,
       streak: user.streak,
+      streakGoal: user.streakGoal || null,
+      dailyGoal: user.dailyGoal || null,
+      dailyProgress: user.dailyProgress || null,
+      lastActiveDate: user.lastActiveDate || null,
       createdAt: user.createdAt,
     };
   }

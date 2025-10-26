@@ -25,9 +25,21 @@ export function ThemeProvider({
 
   useEffect(() => {
     const root = document.documentElement;
+    
+    // Add transition animation
+    root.classList.add('theme-transitioning');
+    
+    // Remove old theme and add new one
     root.classList.remove("light", "dark");
     root.classList.add(theme);
     localStorage.setItem("theme", theme);
+    
+    // Remove animation class after transition
+    const timer = setTimeout(() => {
+      root.classList.remove('theme-transitioning');
+    }, 600);
+    
+    return () => clearTimeout(timer);
   }, [theme]);
 
   const toggleTheme = () => {

@@ -8,9 +8,14 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   email: text("email"),
   name: text("name"),
+  profileImage: text("profile_image"),
   leetcodeUsername: text("leetcode_username"),
   codeforcesUsername: text("codeforces_username"),
   streak: integer("streak").default(0),
+  streakGoal: integer("streak_goal").default(7),
+  dailyGoal: integer("daily_goal").default(3),
+  dailyProgress: integer("daily_progress").default(0),
+  lastActiveDate: timestamp("last_active_date"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

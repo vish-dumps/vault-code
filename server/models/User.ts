@@ -7,9 +7,14 @@ export interface IUser extends Document {
   email: string;
   password: string;
   name?: string;
+  profileImage?: string;
   leetcodeUsername?: string;
   codeforcesUsername?: string;
   streak: number;
+  streakGoal?: number;
+  dailyGoal?: number;
+  dailyProgress?: number;
+  lastActiveDate?: Date;
   createdAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
@@ -39,6 +44,10 @@ const UserSchema = new Schema<IUser>({
     type: String,
     trim: true
   },
+  profileImage: {
+    type: String,
+    trim: true
+  },
   leetcodeUsername: {
     type: String,
     trim: true
@@ -50,6 +59,21 @@ const UserSchema = new Schema<IUser>({
   streak: {
     type: Number,
     default: 0
+  },
+  streakGoal: {
+    type: Number,
+    default: 7
+  },
+  dailyGoal: {
+    type: Number,
+    default: 3
+  },
+  dailyProgress: {
+    type: Number,
+    default: 0
+  },
+  lastActiveDate: {
+    type: Date
   }
 }, {
   timestamps: true

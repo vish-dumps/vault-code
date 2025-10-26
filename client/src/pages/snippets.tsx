@@ -38,8 +38,7 @@ export default function Snippets() {
   const { data: snippets = [], isLoading } = useQuery<Snippet[]>({
     queryKey: ["/api/snippets"],
     queryFn: async () => {
-      const response = await fetch("/api/snippets");
-      if (!response.ok) throw new Error("Failed to fetch snippets");
+      const response = await apiRequest("GET", "/api/snippets");
       return response.json();
     },
   });

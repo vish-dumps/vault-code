@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,14 +8,86 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Save, Link as LinkIcon } from "lucide-react";
 import { SiLeetcode, SiCodeforces } from "react-icons/si";
+import { useAuth } from "@/contexts/AuthContext";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { TopicChart } from "@/components/topic-chart";
+import type { QuestionWithDetails, TopicProgress } from "@shared/schema";
 
 export default function Profile() {
-  const [leetcodeUsername, setLeetcodeUsername] = useState("johndoe");
-  const [codeforcesUsername, setCodeforcesUsername] = useState("john_coder");
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [leetcodeUsername, setLeetcodeUsername] = useState("");
+  const [codeforcesUsername, setCodeforcesUsername] = useState("");
+
+  // Fetch user profile
+  const { data: userProfile } = useQuery<any>({
+    queryKey: ["/api/user/profile"],
+  });
+
+  // Fetch questions for stats
+  const { data: questions = [] } = useQuery<QuestionWithDetails[]>({
+    queryKey: ["/api/questions"],
+  });
+
+  // Fetch topic progress for graph
+  const { data: topicProgress = [] } = useQuery<TopicProgress[]>({
+    queryKey: ["/api/topics"],
+  });
+
+  // Update local state when user profile loads
+  useEffect(() => {
+    if (userProfile) {
+      setLeetcodeUsername(userProfile.leetcodeUsername || "");
+      setCodeforcesUsername(userProfile.codeforcesUsername || "");
+    }
+  }, [userProfile]);
+
+  // Save profile mutation
+  const saveProfileMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await apiRequest("PATCH", "/api/user/profile", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
+      toast({ title: "Success", description: "Profile updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update profile", variant: "destructive" });
+    },
+  });
 
   const handleSave = () => {
-    console.log("Saving profile:", { leetcodeUsername, codeforcesUsername });
-    // todo: remove mock functionality - replace with actual save
+    saveProfileMutation.mutate({
+      leetcodeUsername: leetcodeUsername.trim() || undefined,
+      codeforcesUsername: codeforcesUsername.trim() || undefined,
+    });
+  };
+
+  // Format topic data for chart
+  const chartData = topicProgress.length > 0 
+    ? topicProgress.map((t: TopicProgress) => ({
+        topic: t.topic,
+        solved: t.solved || 0,
+      }))
+    : [
+        { topic: "Arrays", solved: 0 },
+        { topic: "Strings", solved: 0 },
+        { topic: "DP", solved: 0 },
+        { topic: "Graphs", solved: 0 },
+        { topic: "Trees", solved: 0 },
+      ];
+
+  // Get user initials
+  const getInitials = () => {
+    const name = userProfile?.name || userProfile?.username || "User";
+    return name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  // Format date
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   };
 
   return (
@@ -35,12 +108,12 @@ export default function Profile() {
             <CardContent className="space-y-4">
               <div className="flex flex-col items-center gap-4">
                 <Avatar className="h-20 w-20">
-                  <AvatarFallback className="text-2xl">JD</AvatarFallback>
+                  <AvatarFallback className="text-2xl">{getInitials()}</AvatarFallback>
                 </Avatar>
                 <div className="text-center">
-                  <h3 className="font-semibold text-lg">John Doe</h3>
+                  <h3 className="font-semibold text-lg">{userProfile?.name || userProfile?.username || "User"}</h3>
                   <p className="text-sm text-muted-foreground">
-                    john@example.com
+                    {userProfile?.email || "No email"}
                   </p>
                 </div>
               </div>
@@ -50,19 +123,21 @@ export default function Profile() {
                   <span className="text-sm text-muted-foreground">
                     Member since
                   </span>
-                  <span className="text-sm font-medium">Jan 2025</span>
+                  <span className="text-sm font-medium">
+                    {userProfile?.createdAt ? formatDate(userProfile.createdAt) : "N/A"}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">
                     Total problems
                   </span>
-                  <span className="text-sm font-medium">156</span>
+                  <span className="text-sm font-medium">{questions.length}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">
                     Current streak
                   </span>
-                  <Badge variant="secondary">23 days</Badge>
+                  <Badge variant="secondary">{userProfile?.streak || 0} {userProfile?.streak === 1 ? 'day' : 'days'}</Badge>
                 </div>
               </div>
             </CardContent>
@@ -151,30 +226,32 @@ export default function Profile() {
             </CardContent>
           </Card>
 
+          <TopicChart data={chartData} />
+
           <Card data-testid="card-topic-stats">
             <CardHeader>
               <CardTitle>Topic Statistics</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
-                {[
-                  { topic: "Arrays", count: 45 },
-                  { topic: "Strings", count: 32 },
-                  { topic: "Dynamic Programming", count: 28 },
-                  { topic: "Graphs", count: 21 },
-                  { topic: "Trees", count: 30 },
-                ].map((stat) => (
-                  <div
-                    key={stat.topic}
-                    className="p-3 rounded-md border"
-                    data-testid={`topic-stat-${stat.topic.toLowerCase().replace(/\s+/g, '-')}`}
-                  >
-                    <div className="text-2xl font-bold">{stat.count}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {stat.topic}
+                {topicProgress.length > 0 ? (
+                  topicProgress.map((stat) => (
+                    <div
+                      key={stat.topic}
+                      className="p-3 rounded-md border"
+                      data-testid={`topic-stat-${stat.topic.toLowerCase().replace(/\s+/g, '-')}`}
+                    >
+                      <div className="text-2xl font-bold">{stat.solved || 0}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {stat.topic}
+                      </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="col-span-2 text-center text-muted-foreground py-8">
+                    No topic data yet. Start solving problems!
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>

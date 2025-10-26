@@ -7,6 +7,7 @@ export interface ISnippet extends Document {
   language: string;
   code: string;
   notes?: string;
+  tags?: string[];
   createdAt: Date;
 }
 
@@ -33,6 +34,10 @@ const SnippetSchema = new Schema<ISnippet>({
   notes: {
     type: String,
     trim: true
+  },
+  tags: {
+    type: [String],
+    default: []
   }
 }, {
   timestamps: true
