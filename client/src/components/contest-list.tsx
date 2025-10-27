@@ -1,7 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, ExternalLink } from "lucide-react";
+import { Calendar, ExternalLink, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface Contest {
   id: string;
@@ -16,13 +19,38 @@ interface ContestListProps {
 }
 
 export function ContestList({ contests }: ContestListProps) {
+  const { toast } = useToast();
+
+  const createReminderMutation = useMutation({
+    mutationFn: async (contest: Contest) => {
+      const response = await apiRequest("POST", "/api/todos", {
+        title: `Contest: ${contest.name} - ${contest.startTime}`,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/todos"] });
+      toast({
+        title: "Reminder Set!",
+        description: "Contest reminder added to your TODO list",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to create reminder",
+        variant: "destructive",
+      });
+    },
+  });
+
   return (
-    <Card data-testid="card-contest-list">
-      <CardHeader>
-        <CardTitle>Upcoming Contests</CardTitle>
+    <Card data-testid="card-contest-list" className="h-full flex flex-col">
+      <CardHeader className="pb-2 flex-shrink-0">
+        <CardTitle className="text-base">Upcoming Contests</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
+      <CardContent className="flex-1 overflow-y-auto">
+        <div className="space-y-2">
           {contests.map((contest) => (
             <div
               key={contest.id}
@@ -41,15 +69,27 @@ export function ContestList({ contests }: ContestListProps) {
                   <span>{contest.startTime}</span>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => window.open(contest.url, '_blank')}
-                data-testid={`button-open-contest-${contest.id}`}
-              >
-                <ExternalLink className="h-4 w-4" />
-              </Button>
+              <div className="flex gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => createReminderMutation.mutate(contest)}
+                  data-testid={`button-remind-contest-${contest.id}`}
+                >
+                  <Bell className="h-3 w-3 mr-1" />
+                  Remind Me
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => window.open(contest.url, '_blank')}
+                  data-testid={`button-open-contest-${contest.id}`}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>

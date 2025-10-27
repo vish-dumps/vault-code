@@ -11,10 +11,15 @@ export interface IUser extends Document {
   leetcodeUsername?: string;
   codeforcesUsername?: string;
   streak: number;
+  maxStreak?: number;
   streakGoal?: number;
   dailyGoal?: number;
   dailyProgress?: number;
   lastActiveDate?: Date;
+  avatarType?: 'initials' | 'random' | 'custom';
+  avatarGender?: 'male' | 'female';
+  customAvatarUrl?: string;
+  randomAvatarSeed?: number;
   createdAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
@@ -60,6 +65,10 @@ const UserSchema = new Schema<IUser>({
     type: Number,
     default: 0
   },
+  maxStreak: {
+    type: Number,
+    default: 0
+  },
   streakGoal: {
     type: Number,
     default: 7
@@ -74,6 +83,23 @@ const UserSchema = new Schema<IUser>({
   },
   lastActiveDate: {
     type: Date
+  },
+  avatarType: {
+    type: String,
+    enum: ['initials', 'random', 'custom'],
+    default: 'initials'
+  },
+  avatarGender: {
+    type: String,
+    enum: ['male', 'female'],
+    default: 'male'
+  },
+  customAvatarUrl: {
+    type: String,
+    trim: true
+  },
+  randomAvatarSeed: {
+    type: Number
   }
 }, {
   timestamps: true

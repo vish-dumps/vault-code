@@ -18,8 +18,17 @@ export function StatsCard({ title, value, icon: Icon, trend }: StatsCardProps) {
     return 'group-hover:text-primary';
   };
 
+  // Get gradient class based on card type for light theme
+  const getLightGradient = () => {
+    if (title.toLowerCase().includes('streak')) return 'bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-transparent dark:to-transparent';
+    if (title.toLowerCase().includes('problems')) return 'bg-gradient-to-br from-green-50 to-green-100/50 dark:from-transparent dark:to-transparent';
+    if (title.toLowerCase().includes('topic')) return 'bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-transparent dark:to-transparent';
+    if (title.toLowerCase().includes('snippet')) return 'bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-transparent dark:to-transparent';
+    return '';
+  };
+
   return (
-    <Card data-testid={`card-stats-${title.toLowerCase().replace(/\s+/g, '-')}`} className="group transition-all hover:shadow-lg">
+    <Card data-testid={`card-stats-${title.toLowerCase().replace(/\s+/g, '-')}`} className={`group transition-all hover:shadow-lg ${getLightGradient()}`}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <p className="text-sm font-medium text-muted-foreground">{title}</p>
         <Icon className={`h-4 w-4 text-muted-foreground transition-colors duration-300 ${getIconHoverColor()}`} />

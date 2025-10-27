@@ -350,10 +350,10 @@
   /* Theme transition animation */
   @keyframes theme-transition {
     0% {
-      clip-path: circle(0% at 0% 0%);
+      clip-path: circle(0% at 100% 0%);
     }
     100% {
-      clip-path: circle(150% at 0% 0%);
+      clip-path: circle(150% at 100% 0%);
     }
   }
 

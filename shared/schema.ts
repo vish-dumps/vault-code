@@ -12,10 +12,16 @@ export const users = pgTable("users", {
   leetcodeUsername: text("leetcode_username"),
   codeforcesUsername: text("codeforces_username"),
   streak: integer("streak").default(0),
+  maxStreak: integer("max_streak").default(0),
   streakGoal: integer("streak_goal").default(7),
   dailyGoal: integer("daily_goal").default(3),
   dailyProgress: integer("daily_progress").default(0),
   lastActiveDate: timestamp("last_active_date"),
+  lastResetDate: timestamp("last_reset_date"),
+  avatarType: text("avatar_type").default('initials'),
+  avatarGender: text("avatar_gender").default('male'),
+  customAvatarUrl: text("custom_avatar_url"),
+  randomAvatarSeed: integer("random_avatar_seed"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -60,6 +66,7 @@ export const snippets = pgTable("snippets", {
   language: text("language").notNull(),
   code: text("code").notNull(),
   notes: text("notes"),
+  tags: text("tags").array(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -67,6 +74,7 @@ export const snippets = pgTable("snippets", {
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
+  lastResetDate: true,
 });
 
 export const insertQuestionSchema = createInsertSchema(questions).omit({

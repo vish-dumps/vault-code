@@ -1,4 +1,4 @@
-import { Home, Code2, BookMarked, Trophy, User, LogOut, FileCode } from "lucide-react";
+import { Home, BookOpen, Code2, Trophy, User, LogOut } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -21,19 +21,14 @@ const menuItems = [
     icon: Home,
   },
   {
-    title: "Workspace",
-    url: "/workspace",
-    icon: Code2,
+    title: "Questions",
+    url: "/questions",
+    icon: BookOpen,
   },
   {
     title: "Snippets",
     url: "/snippets",
-    icon: FileCode,
-  },
-  {
-    title: "Question Vault",
-    url: "/questions",
-    icon: BookMarked,
+    icon: Code2,
   },
   {
     title: "Contests",
@@ -57,7 +52,7 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel className="text-lg font-bold px-4 py-3">
@@ -70,10 +65,11 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     asChild
                     isActive={location === item.url}
+                    tooltip={item.title}
                     data-testid={`link-${item.title.toLowerCase().replace(' ', '-')}`}
                   >
                     <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
+                      <item.icon />
                       <span>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
@@ -83,19 +79,34 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4">
-        <div className="mb-2 text-sm text-muted-foreground">
-          {user?.name || user?.username}
-        </div>
-        <Button
-          variant="ghost"
-          className="w-full justify-start"
-          data-testid="button-logout"
-          onClick={handleLogout}
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          Logout
-        </Button>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip={user?.name || user?.username || "User"}
+            >
+              <Link href="/profile">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                  <span className="text-xs font-semibold">
+                    {(user?.name || user?.username || "U").charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <span className="truncate">{user?.name || user?.username}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={handleLogout}
+              data-testid="button-logout"
+              tooltip="Logout"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Logout</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );

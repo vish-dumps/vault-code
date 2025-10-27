@@ -12,6 +12,49 @@ import { z } from "zod";
 import { authenticateToken, getUserId, AuthRequest } from "./auth";
 import { Todo } from "./models/Todo";
 
+// Helper function to update streak on activity
+async function updateStreakOnActivity(userId: string): Promise<void> {
+  const user = await mongoStorage.getUser(userId);
+  if (!user) return;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const lastActive = user.lastActiveDate ? new Date(user.lastActiveDate) : null;
+  if (lastActive) {
+    lastActive.setHours(0, 0, 0, 0);
+  }
+
+  let newStreak = user.streak || 0;
+  
+  if (!lastActive) {
+    // First time activity
+    newStreak = 1;
+  } else {
+    const daysDiff = Math.floor((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysDiff === 0) {
+      // Same day, no change
+      return;
+    } else if (daysDiff === 1) {
+      // Consecutive day
+      newStreak += 1;
+    } else {
+      // Streak broken
+      newStreak = 1;
+    }
+  }
+
+  // Update maxStreak if current streak is higher
+  const maxStreak = Math.max(user.maxStreak || 0, newStreak);
+
+  await mongoStorage.updateUser(userId, {
+    streak: newStreak,
+    maxStreak,
+    lastActiveDate: new Date()
+  });
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Apply authentication middleware to all API routes
   app.use('/api', authenticateToken);
@@ -50,6 +93,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getUserId(req);
       const data = insertQuestionSchema.parse(req.body);
       const question = await mongoStorage.createQuestion(data, userId);
+      
+      // Update streak on question add
+      await updateStreakOnActivity(userId);
+      
+      // Increment daily progress
+      const user = await mongoStorage.getUser(userId);
+      if (user) {
+        await mongoStorage.updateUser(userId, {
+          dailyProgress: (user.dailyProgress || 0) + 1
+        });
+      }
+      
       res.status(201).json(question);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -186,10 +241,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/user/profile", async (req: AuthRequest, res) => {
     try {
       const userId = getUserId(req);
-      const user = await mongoStorage.getUser(userId);
+      let user = await mongoStorage.getUser(userId);
       
       if (!user) {
         return res.status(404).json({ error: "User not found" });
+      }
+
+      // Check if we need to reset daily progress
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const lastReset = user.lastResetDate ? new Date(user.lastResetDate) : null;
+      if (lastReset) {
+        lastReset.setHours(0, 0, 0, 0);
+      }
+
+      // Reset daily progress if it's a new day
+      if (!lastReset || lastReset.getTime() < today.getTime()) {
+        user = await mongoStorage.updateUser(userId, {
+          dailyProgress: 0,
+          lastResetDate: new Date()
+        });
       }
       
       res.json(user);
@@ -244,6 +316,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getUserId(req);
       const data = insertSnippetSchema.parse(req.body);
       const snippet = await mongoStorage.createSnippet(data, userId);
+      
+      // Update streak on snippet add
+      await updateStreakOnActivity(userId);
+      
       res.status(201).json(snippet);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -273,11 +349,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/todos", async (req: AuthRequest, res) => {
     try {
       const userId = getUserId(req);
-      const todos = await Todo.find({ userId }).sort({ createdAt: -1 });
+      // Clean up old todos first
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      await Todo.deleteMany({ 
+        userId, 
+        createdAt: { $lt: today },
+        retainUntil: { $exists: false }
+      });
+      
+      const todos = await Todo.find({ userId }).sort({ order: 1, createdAt: -1 });
       res.json(todos.map(todo => ({
         id: todo._id.toString(),
         title: todo.title,
         completed: todo.completed,
+        order: todo.order,
+        retainUntil: todo.retainUntil,
         createdAt: todo.createdAt,
         completedAt: todo.completedAt
       })));
@@ -296,10 +383,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Title is required" });
       }
 
+      // Get max order
+      const maxOrderTodo = await Todo.findOne({ userId }).sort({ order: -1 });
+      const newOrder = (maxOrderTodo?.order ?? -1) + 1;
+
       const todo = new Todo({
         userId,
         title: title.trim(),
-        completed: false
+        completed: false,
+        order: newOrder
       });
       
       await todo.save();
@@ -308,6 +400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: todo._id.toString(),
         title: todo.title,
         completed: todo.completed,
+        order: todo.order,
         createdAt: todo.createdAt
       });
     } catch (error) {
@@ -320,14 +413,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = getUserId(req);
       const { id } = req.params;
-      const { completed } = req.body;
+      const { completed, retainUntil } = req.body;
+
+      const updateData: any = {};
+      if (completed !== undefined) {
+        updateData.completed = completed;
+        updateData.completedAt = completed ? new Date() : undefined;
+      }
+      if (retainUntil !== undefined) {
+        updateData.retainUntil = retainUntil;
+      }
 
       const todo = await Todo.findOneAndUpdate(
         { _id: id, userId },
-        { 
-          completed,
-          completedAt: completed ? new Date() : undefined
-        },
+        updateData,
         { new: true }
       );
 
@@ -339,6 +438,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: todo._id.toString(),
         title: todo.title,
         completed: todo.completed,
+        order: todo.order,
+        retainUntil: todo.retainUntil,
         createdAt: todo.createdAt,
         completedAt: todo.completedAt
       });
@@ -353,6 +454,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getUserId(req);
       const { id } = req.params;
       
+      // Mark as completed before deleting for consistency tracking
+      await Todo.findOneAndUpdate(
+        { _id: id, userId },
+        { completed: true, completedAt: new Date() },
+        { new: true }
+      );
+      
       const result = await Todo.findOneAndDelete({ _id: id, userId });
       
       if (!result) {
@@ -366,7 +474,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Streak update endpoint
+  // Streak check endpoint (for dashboard load)
   app.post("/api/user/update-streak", async (req: AuthRequest, res) => {
     try {
       const userId = getUserId(req);
@@ -376,43 +484,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const lastActive = user.lastActiveDate ? new Date(user.lastActiveDate) : null;
-      if (lastActive) {
-        lastActive.setHours(0, 0, 0, 0);
-      }
-
-      let newStreak = user.streak || 0;
-      
-      if (!lastActive) {
-        // First time activity
-        newStreak = 1;
-      } else {
-        const daysDiff = Math.floor((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24));
-        
-        if (daysDiff === 0) {
-          // Same day, no change
-          return res.json({ streak: newStreak });
-        } else if (daysDiff === 1) {
-          // Consecutive day
-          newStreak += 1;
-        } else {
-          // Streak broken
-          newStreak = 1;
-        }
-      }
-
-      await mongoStorage.updateUser(userId, {
-        streak: newStreak,
-        lastActiveDate: new Date()
-      });
-
-      res.json({ streak: newStreak });
+      // Just return current streak, don't update
+      // Streak only updates on question/snippet add
+      res.json({ streak: user.streak || 0 });
     } catch (error) {
-      console.error("Error updating streak:", error);
-      res.status(500).json({ error: "Failed to update streak" });
+      console.error("Error fetching streak:", error);
+      res.status(500).json({ error: "Failed to fetch streak" });
+    }
+  });
+
+  // Reorder todos endpoint
+  app.post("/api/todos/reorder", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const { todoIds } = req.body; // Array of todo IDs in new order
+      
+      if (!Array.isArray(todoIds)) {
+        return res.status(400).json({ error: "todoIds must be an array" });
+      }
+
+      // Update order for each todo
+      const updatePromises = todoIds.map((id, index) => 
+        Todo.findOneAndUpdate(
+          { _id: id, userId },
+          { order: index },
+          { new: true }
+        )
+      );
+      
+      await Promise.all(updatePromises);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error reordering todos:", error);
+      res.status(500).json({ error: "Failed to reorder todos" });
     }
   });
 

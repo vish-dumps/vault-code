@@ -5,6 +5,8 @@ export interface ITodo extends Document {
   userId: string;
   title: string;
   completed: boolean;
+  order: number;
+  retainUntil?: Date;
   createdAt: Date;
   completedAt?: Date;
 }
@@ -23,6 +25,13 @@ const TodoSchema = new Schema<ITodo>({
   completed: {
     type: Boolean,
     default: false
+  },
+  order: {
+    type: Number,
+    default: 0
+  },
+  retainUntil: {
+    type: Date
   },
   completedAt: {
     type: Date

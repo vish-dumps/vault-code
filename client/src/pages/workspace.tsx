@@ -16,12 +16,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Save, FileCode } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { TagInput } from "@/components/tag-input";
 
 export default function Workspace() {
   const [language, setLanguage] = useState("javascript");
   const [code, setCode] = useState(codeTemplates[language]);
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export default function Workspace() {
     }
 
     try {
-      await apiRequest("POST", "/api/snippets", { title, language, code, notes });
+      await apiRequest("POST", "/api/snippets", { title, language, code, notes, tags });
       
       toast({
         title: "Success",
@@ -53,6 +55,7 @@ export default function Workspace() {
       setTitle("");
       setCode(codeTemplates[language]);
       setNotes("");
+      setTags([]);
     } catch (error) {
       console.error("Failed to save snippet:", error);
       toast({
@@ -126,8 +129,17 @@ export default function Workspace() {
                   placeholder="Add notes about this snippet..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="min-h-32"
+                  className="min-h-24"
                   data-testid="textarea-snippet-notes"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tags">Tags</Label>
+                <TagInput
+                  value={tags}
+                  onChange={setTags}
+                  placeholder="Type and press Enter to add tags..."
                 />
               </div>
 

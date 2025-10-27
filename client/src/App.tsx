@@ -88,7 +88,7 @@ function App() {
               <div className="flex h-screen w-full">
                 <AppSidebar />
                 <div className="flex flex-col flex-1 overflow-hidden">
-                  <header className="flex items-center justify-between h-16 px-4 border-b bg-background">
+                  <header className="flex items-center justify-between h-12 px-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                     <SidebarTrigger data-testid="button-sidebar-toggle" />
                     <ThemeToggle />
                   </header>

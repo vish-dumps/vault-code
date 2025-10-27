@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, ExternalLink, Edit, Plus, Save, X } from "lucide-react";
+import { ArrowLeft, ExternalLink, Edit, Plus, Save, X, Code2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { QuestionWithDetails } from "@shared/schema";
@@ -351,32 +351,109 @@ export default function QuestionDetails() {
                 <h3 className="text-sm font-semibold">Your Approaches</h3>
               </div>
 
-              {question.approaches.length > 0 && (
-                <Tabs
-                  value={currentApproachId}
-                  onValueChange={setSelectedApproach}
-                >
-                  <TabsList className="w-full">
-                    {question.approaches.map((approach) => (
-                      <TabsTrigger
-                        key={approach.id}
-                        value={approach.id.toString()}
-                        className="flex-1"
-                        data-testid={`tab-approach-${approach.id}`}
-                      >
-                        {approach.name || approach.language}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              )}
+              {!isAddingApproach ? (
+                <>
+                  {question.approaches.length > 0 && (
+                    <Tabs
+                      value={currentApproachId}
+                      onValueChange={setSelectedApproach}
+                    >
+                      <TabsList className="w-full">
+                        {question.approaches.map((approach) => (
+                          <TabsTrigger
+                            key={approach.id}
+                            value={approach.id.toString()}
+                            className="flex-1"
+                            data-testid={`tab-approach-${approach.id}`}
+                          >
+                            {approach.name || approach.language}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </Tabs>
+                  )}
 
-              {currentApproach?.notes && (
-                <div>
-                  <h3 className="text-sm font-semibold mb-2">Approach Notes</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {currentApproach.notes}
-                  </p>
+                  {currentApproach?.notes && (
+                    <div>
+                      <h3 className="text-sm font-semibold mb-2">Approach Notes</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {currentApproach.notes}
+                      </p>
+                    </div>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleAddApproach}
+                    data-testid="button-add-approach"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add New Approach
+                  </Button>
+                </>
+              ) : (
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold">New Approach</h3>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCancelAddApproach}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Approach Name</label>
+                    <Input
+                      value={newApproachName}
+                      onChange={(e) => setNewApproachName(e.target.value)}
+                      placeholder="e.g., Hash Map Solution, Two Pointers"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Language</label>
+                    <Select value={newApproachLanguage} onValueChange={setNewApproachLanguage}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="python">Python</SelectItem>
+                        <SelectItem value="javascript">JavaScript</SelectItem>
+                        <SelectItem value="cpp">C++</SelectItem>
+                        <SelectItem value="java">Java</SelectItem>
+                        <SelectItem value="typescript">TypeScript</SelectItem>
+                        <SelectItem value="go">Go</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Notes (Optional)</label>
+                    <Textarea
+                      value={newApproachNotes}
+                      onChange={(e) => setNewApproachNotes(e.target.value)}
+                      placeholder="Add notes about this approach..."
+                      className="min-h-[80px]"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleCancelAddApproach}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleSaveApproach}
+                      disabled={createApproachMutation.isPending}
+                      className="flex-1"
+                    >
+                      {createApproachMutation.isPending ? "Saving..." : "Save"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Write your code in the editor on the right →</p>
                 </div>
               )}
             </div>
@@ -389,93 +466,20 @@ export default function QuestionDetails() {
         {isAddingApproach ? (
           <>
             <div className="flex items-center justify-between p-4 border-b shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAddApproach}
-                disabled
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Approach
-              </Button>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCancelAddApproach}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveApproach}
-                  disabled={createApproachMutation.isPending}
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  {createApproachMutation.isPending ? "Saving..." : "Save Approach"}
-                </Button>
-              </div>
+              <span className="text-sm font-medium">Code Editor - New Approach</span>
+              <span className="text-xs text-muted-foreground">Language: {newApproachLanguage}</span>
             </div>
-            <div className="flex-1 flex flex-col p-4 space-y-4 overflow-y-auto min-h-0">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Approach Name</label>
-                <Input
-                  value={newApproachName}
-                  onChange={(e) => setNewApproachName(e.target.value)}
-                  placeholder="e.g., Hash Map Solution, Two Pointers"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">Notes (Optional)</label>
-                <Textarea
-                  value={newApproachNotes}
-                  onChange={(e) => setNewApproachNotes(e.target.value)}
-                  placeholder="Add notes about this approach..."
-                  className="min-h-[100px]"
-                />
-              </div>
-              <div className="flex-1 flex flex-col min-h-0">
-                <div className="flex items-center justify-between mb-2 shrink-0">
-                  <label className="text-sm font-medium">Code Editor</label>
-                  <Select value={newApproachLanguage} onValueChange={setNewApproachLanguage}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="python">Python</SelectItem>
-                      <SelectItem value="javascript">JavaScript</SelectItem>
-                      <SelectItem value="cpp">C++</SelectItem>
-                      <SelectItem value="java">Java</SelectItem>
-                      <SelectItem value="typescript">TypeScript</SelectItem>
-                      <SelectItem value="go">Go</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  <CodeEditor
-                    value={newApproachCode}
-                    onChange={(value) => setNewApproachCode(value || "")}
-                    language={newApproachLanguage}
-                    height="100%"
-                  />
-                </div>
-              </div>
+            <div className="flex-1 min-h-0 overflow-hidden p-4">
+              <CodeEditor
+                value={newApproachCode}
+                onChange={(value) => setNewApproachCode(value || "")}
+                language={newApproachLanguage}
+                height="100%"
+              />
             </div>
           </>
         ) : question.approaches.length > 0 ? (
           <>
-            <div className="flex items-center justify-between p-4 border-b shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAddApproach}
-                data-testid="button-add-approach"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Approach
-              </Button>
-            </div>
             <div className="flex-1 flex flex-col min-h-0">
               {question.approaches.map((approach) => (
                 <div
@@ -501,22 +505,13 @@ export default function QuestionDetails() {
             </div>
           </>
         ) : (
-          <>
-            <div className="flex items-center justify-between p-4 border-b shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAddApproach}
-                data-testid="button-add-approach"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Approach
-              </Button>
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            <div className="text-center">
+              <Code2 className="h-16 w-16 mx-auto mb-4 opacity-50" />
+              <p>No approaches yet</p>
+              <p className="text-sm mt-2">Click "Add New Approach" on the left to get started</p>
             </div>
-            <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              No solutions added yet. Click "Add Approach" to add one.
-            </div>
-          </>
+          </div>
         )}
       </div>
     </div>

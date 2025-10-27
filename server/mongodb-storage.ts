@@ -236,6 +236,7 @@ export class MongoStorage implements IStorage {
       language: insertSnippet.language,
       code: insertSnippet.code,
       notes: insertSnippet.notes,
+      tags: insertSnippet.tags || [],
     });
 
     await snippet.save();
@@ -299,6 +300,7 @@ export class MongoStorage implements IStorage {
       language: snippet.language,
       code: snippet.code,
       notes: snippet.notes || null,
+      tags: snippet.tags || [],
       createdAt: snippet.createdAt,
     };
   }

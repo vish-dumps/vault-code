@@ -1,12 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { CheckCircle, Flame, TrendingUp, Plus, FileCode, Code2, Trash2, CheckSquare, Square } from "lucide-react";
+import { CheckCircle, Flame, TrendingUp, Plus, FileCode, Code2, Trash2, CheckSquare, Square, Settings, GripVertical, Clock, Circle } from "lucide-react";
 import { StatsCard } from "@/components/stats-card";
 import { StatsCardWithProgress } from "@/components/stats-card-with-progress";
 import { ContestList } from "@/components/contest-list";
+import { FloatingActionButton } from "@/components/floating-action-button";
+import { MotivationQuote } from "@/components/motivation-quote";
+import { GoalSettingsDialog } from "@/components/goal-settings-dialog";
+import { StreakCalendar } from "@/components/streak-calendar";
+import { WeeklyActivityGraph } from "@/components/weekly-activity-graph";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,7 +32,10 @@ interface Todo {
   id: string;
   title: string;
   completed: boolean;
+  order: number;
+  retainUntil?: string;
   createdAt: string;
+  completedAt?: string;
 }
 
 export default function Dashboard() {
@@ -34,7 +43,10 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [newTodoTitle, setNewTodoTitle] = useState("");
-  const [todoFilter, setTodoFilter] = useState<"all" | "active" | "completed">("all");
+  const [todoFilter, setTodoFilter] = useState<"all" | "active" | "completed">("active");
+  const [draggedTodo, setDraggedTodo] = useState<string | null>(null);
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
+  const [goalDialogType, setGoalDialogType] = useState<"daily" | "streak">("daily");
 
   // Fetch questions to calculate stats
   const { data: questions = [] } = useQuery<QuestionWithDetails[]>({
@@ -129,6 +141,29 @@ export default function Dashboard() {
     },
   });
 
+  // Reorder todos mutation
+  const reorderTodosMutation = useMutation({
+    mutationFn: async (todoIds: string[]) => {
+      await apiRequest("POST", "/api/todos/reorder", { todoIds });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/todos"] });
+    },
+  });
+
+  // Update todo retention mutation
+  const updateRetentionMutation = useMutation({
+    mutationFn: async ({ id, days }: { id: string; days: number | null }) => {
+      const retainUntil = days ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
+      const response = await apiRequest("PATCH", `/api/todos/${id}`, { retainUntil });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/todos"] });
+      toast({ title: "Success", description: "Task retention updated" });
+    },
+  });
+
   // Calculate stats from questions
   const totalProblems = questions.length;
   
@@ -161,8 +196,8 @@ export default function Dashboard() {
     questions.filter(q => q.tags?.includes(topTopic)).length;
 
   const currentStreak = userProfile?.streak || 0;
-  const streakGoal = userProfile?.streakGoal || 7;
-  const dailyGoal = userProfile?.dailyGoal || 3;
+  const streakGoal = userProfile?.streakGoal ?? 7;
+  const dailyGoal = userProfile?.dailyGoal ?? 3;
   const dailyProgress = userProfile?.dailyProgress || 0;
 
   // Filter todos
@@ -182,141 +217,272 @@ export default function Dashboard() {
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, todoId: string) => {
+    setDraggedTodo(todoId);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e: React.DragEvent, targetTodoId: string) => {
+    e.preventDefault();
+    if (!draggedTodo || draggedTodo === targetTodoId) return;
+
+    const draggedIndex = filteredTodos.findIndex(t => t.id === draggedTodo);
+    const targetIndex = filteredTodos.findIndex(t => t.id === targetTodoId);
+
+    const newTodos = [...filteredTodos];
+    const [removed] = newTodos.splice(draggedIndex, 1);
+    newTodos.splice(targetIndex, 0, removed);
+
+    const todoIds = newTodos.map(t => t.id);
+    reorderTodosMutation.mutate(todoIds);
+    setDraggedTodo(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTodo(null);
+  };
+
+  // Generate weekly activity data - memoized to prevent re-generation on every render
+  const weeklyData = useMemo(() => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const today = new Date().getDay();
+    const adjustedToday = today === 0 ? 6 : today - 1;
+    
+    return days.map((day, index) => ({
+      day,
+      problems: index <= adjustedToday ? Math.floor(Math.random() * 6) : 0,
+    }));
+  }, []); // Empty dependency array means this only runs once
+  const motivationalQuotes = [
+    "The only way to do great work is to love what you do.",
+    "Code is like humor. When you have to explain it, it's bad.",
+    "First, solve the problem. Then, write the code.",
+    "Experience is the name everyone gives to their mistakes.",
+    "The best error message is the one that never shows up.",
+  ];
+  const randomQuote = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
+
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-4xl md:text-5xl font-bold">Welcome Back, {user?.name || user?.username || "Coder"}</h1>
-        <p className="text-muted-foreground mt-2 text-lg">Let's make today count. Keep building your coding skills!</p>
+    <div className="p-3 h-screen overflow-hidden flex flex-col">
+      <div className="mb-2 flex-shrink-0">
+        <div className="text-xs text-muted-foreground">Welcome Back,</div>
+        <h1 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">
+          <span className="bg-gradient-to-r from-[#d397fa] to-[#8364e8] bg-clip-text text-transparent">{user?.name || user?.username || "Coder"}</span>
+        </h1>
+        <p className="text-muted-foreground mt-0.5 text-xs">Let's make today count. Keep building your coding skills!</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatsCardWithProgress
-          title="Problems Solved"
-          value={totalProblems}
-          icon={CheckCircle}
-          trend={`Daily goal: ${dailyGoal} problems`}
-          progress={dailyProgress}
-          goal={dailyGoal}
-          progressType="daily"
-          onGoalChange={(newGoal) => updateGoalMutation.mutate({ dailyGoal: newGoal })}
-        />
-        <StatsCardWithProgress
-          title="Current Streak" 
-          value={`${currentStreak} days`}
-          icon={Flame}
-          progress={currentStreak}
-          goal={streakGoal}
-          progressType="streak"
-          onGoalChange={(newGoal) => updateGoalMutation.mutate({ streakGoal: newGoal })}
-        />
-        <StatsCard
-          title="Top Topic"
-          value={topTopic}
-          icon={TrendingUp}
-          trend={topTopicCount > 0 ? `${topTopicCount} problems` : "Start solving!"}
-        />
-        <StatsCard
-          title="Code Snippets"
-          value={snippets.length}
-          icon={FileCode}
-          trend="Saved snippets"
-        />
-      </div>
+      {/* Main Grid Layout */}
+      <div className="flex-1 overflow-hidden flex flex-col gap-2 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 flex-1 min-h-0">
+        {/* Left: 4 Stats Cards in 2x2 Grid - Fixed Size */}
+        <div className="lg:col-span-1 min-h-0">
+          <div className="grid grid-cols-2 gap-2 h-full">
+            {/* Problems Solved - Square with Circular Progress */}
+            <Card className="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/20 dark:to-green-900/10 group hover:shadow-lg transition-all">
+              <CardContent className="p-3 h-full flex flex-col items-center justify-between">
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-medium">Problems</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => {
+                      setGoalDialogType("daily");
+                      setGoalDialogOpen(true);
+                    }}
+                  >
+                    <Settings className="h-3 w-3" />
+                  </Button>
+                </div>
+                <div className="relative w-24 h-24">
+                  <svg className="w-full h-full transform -rotate-90">
+                    <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="6" fill="none" className="text-secondary" />
+                    <circle
+                      cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="6" fill="none" strokeLinecap="round"
+                      className="text-green-500"
+                      strokeDasharray={`${2 * Math.PI * 40}`}
+                      strokeDashoffset={`${2 * Math.PI * 40 * (1 - Math.min(dailyProgress / dailyGoal, 1))}`}
+                      style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">{dailyProgress}</div>
+                    <div className="text-xs text-muted-foreground">of {dailyGoal}</div>
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground text-center">Today's progress</div>
+              </CardContent>
+            </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* TODO Section */}
-        <Card>
-          <CardHeader>
+            {/* Streak - Square with Fire Logo */}
+            <Card className="bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-orange-950/20 dark:to-orange-900/10 group hover:shadow-lg transition-all">
+              <CardContent className="p-3 h-full flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium">Streak</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => {
+                      setGoalDialogType("streak");
+                      setGoalDialogOpen(true);
+                    }}
+                  >
+                    <Settings className="h-3 w-3" />
+                  </Button>
+                </div>
+                <div className="text-center flex-1 flex flex-col justify-center items-center">
+                  <div className="relative w-20 h-20 flex items-center justify-center">
+                    {/* Fire SVG Logo */}
+                    <img 
+                      src="/fire-streak.svg" 
+                      alt="Fire" 
+                      className={`w-full h-full ${currentStreak >= streakGoal ? 'animate-pulse' : ''}`}
+                    />
+                    {/* Streak number overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-2xl font-black text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">{currentStreak}</span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">{currentStreak === 1 ? 'day' : 'days'}</div>
+                </div>
+                {/* Progress bar for streak goal */}
+                <div className="space-y-1">
+                  <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-orange-400 to-orange-600 transition-all duration-500" 
+                      style={{ width: `${Math.min((currentStreak / streakGoal) * 100, 100)}%` }} 
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground text-center">{currentStreak}/{streakGoal} goal</div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Top Topic - Square */}
+            <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/20 dark:to-blue-900/10 hover:shadow-lg transition-all">
+              <CardContent className="p-3 h-full flex flex-col items-center justify-center text-center">
+                <TrendingUp className="h-6 w-6 text-blue-500 mb-2" />
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 truncate max-w-full">{topTopic}</div>
+                <p className="text-xs font-medium mt-1">Top Topic</p>
+                <p className="text-xs text-muted-foreground">{topTopicCount > 0 ? `${topTopicCount} solved` : 'Start solving!'}</p>
+              </CardContent>
+            </Card>
+
+            {/* Code Snippets - Square */}
+            <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/20 dark:to-purple-900/10 hover:shadow-lg transition-all">
+              <CardContent className="p-3 h-full flex flex-col items-center justify-center text-center">
+                <FileCode className="h-6 w-6 text-purple-500 mb-2" />
+                <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{snippets.length}</div>
+                <p className="text-xs font-medium mt-1">Code Snippets</p>
+                <p className="text-xs text-muted-foreground">Saved</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Middle: Contests */}
+        <div className="lg:col-span-1 h-full overflow-hidden min-h-0">
+          <ContestList contests={contests} />
+        </div>
+
+        {/* Right: TODO List - Full Height Sidebar */}
+        <Card className="lg:col-span-2 lg:row-span-1 flex flex-col h-full overflow-hidden min-h-0 bg-gradient-to-br from-cyan-50/50 to-blue-50/50 dark:from-cyan-950/10 dark:to-blue-950/10 border-cyan-200/50 dark:border-cyan-800/30">
+          <CardHeader className="pb-2 flex-shrink-0 border-b border-cyan-200/30 dark:border-cyan-800/20">
             <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckSquare className="h-5 w-5" />
-                  TO-DO
-                </CardTitle>
-                <CardDescription>
-                  Manage your daily tasks
-                </CardDescription>
-              </div>
-              {todos.length > 0 && (
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-primary">
-                    {Math.round((completedTodosCount / todos.length) * 100)}%
-                  </div>
-                  <div className="text-xs text-muted-foreground">Complete</div>
-                </div>
-              )}
+              <CardTitle className="text-base flex items-center gap-2">
+                <CheckSquare className="h-4 w-4 text-cyan-500" />
+                <span className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-cyan-400 dark:to-blue-400 bg-clip-text text-transparent font-bold">To-Do List</span>
+                {todos.length > 0 && <Badge variant="secondary" className="ml-2 text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300">{Math.round((completedTodosCount / todos.length) * 100)}%</Badge>}
+              </CardTitle>
             </div>
-            {/* Wave Progress Bar */}
             {todos.length > 0 && (
-              <div className="mt-4 relative h-3 bg-secondary rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-cyan-400 via-teal-500 to-cyan-600 transition-all duration-500 ease-out relative"
-                  style={{ width: `${(completedTodosCount / todos.length) * 100}%` }}
-                >
-                  <div className="absolute inset-0 opacity-30">
-                    <svg className="w-full h-full" viewBox="0 0 100 10" preserveAspectRatio="none">
-                      <path 
-                        d="M0,5 Q25,0 50,5 T100,5 V10 H0 Z" 
-                        fill="white"
-                        className="animate-pulse"
-                      />
-                    </svg>
-                  </div>
-                </div>
+              <div className="mt-2 relative h-2 bg-secondary/50 rounded-full overflow-hidden shadow-inner">
+                <div className="h-full bg-gradient-to-r from-cyan-400 via-teal-500 to-cyan-600 transition-all duration-500 shadow-sm" style={{ width: `${(completedTodosCount / todos.length) * 100}%` }} />
               </div>
             )}
           </CardHeader>
-          <CardContent className="space-y-4">
-            <form onSubmit={handleAddTodo} className="flex gap-2">
-              <Input
-                placeholder="Add a new task..."
-                value={newTodoTitle}
-                onChange={(e) => setNewTodoTitle(e.target.value)}
-              />
-              <Button type="submit" disabled={!newTodoTitle.trim()}>
-                <Plus className="h-4 w-4" />
-              </Button>
+          <CardContent className="space-y-2 flex-1 flex flex-col overflow-hidden pt-3">
+            <form onSubmit={handleAddTodo} className="flex gap-2 flex-shrink-0">
+              <Input placeholder="Add a new task..." value={newTodoTitle} onChange={(e) => setNewTodoTitle(e.target.value)} className="h-8 text-sm bg-white/50 dark:bg-slate-900/50 border-cyan-200 dark:border-cyan-800/30 focus-visible:ring-cyan-500" />
+              <Button type="submit" disabled={!newTodoTitle.trim()} size="sm" className="h-8 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600"><Plus className="h-3 w-3" /></Button>
             </form>
-
-            <Tabs value={todoFilter} onValueChange={(v) => setTodoFilter(v as any)}>
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="all">All ({todos.length})</TabsTrigger>
-                <TabsTrigger value="active">Active ({activeTodosCount})</TabsTrigger>
-                <TabsTrigger value="completed">Done ({completedTodosCount})</TabsTrigger>
+            <Tabs value={todoFilter} onValueChange={(v) => setTodoFilter(v as any)} className="flex-shrink-0">
+              <TabsList className="grid w-full grid-cols-3 h-8 bg-white/50 dark:bg-slate-900/50 border border-cyan-200/50 dark:border-cyan-800/30">
+                <TabsTrigger value="all" className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">All</TabsTrigger>
+                <TabsTrigger value="active" className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">Active</TabsTrigger>
+                <TabsTrigger value="completed" className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">Done</TabsTrigger>
               </TabsList>
             </Tabs>
-
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            <div className="space-y-2 flex-1 overflow-y-auto pr-1 mt-1">
               {filteredTodos.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  {todoFilter === "completed" ? "No completed tasks yet" : "No tasks yet. Add one above!"}
+                <p className="text-center text-muted-foreground py-8 text-sm">
+                  {todoFilter === "completed" ? "No completed tasks" : todoFilter === "active" ? "No tasks yet. Start your day strong 💪" : "No tasks yet"}
                 </p>
               ) : (
                 filteredTodos.map((todo) => (
-                  <div
-                    key={todo.id}
-                    className="flex items-center gap-2 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                  <div 
+                    key={todo.id} 
+                    draggable={!todo.completed}
+                    onDragStart={(e) => !todo.completed && handleDragStart(e, todo.id)}
+                    onDragOver={(e) => !todo.completed && handleDragOver(e)}
+                    onDrop={(e) => !todo.completed && handleDrop(e, todo.id)}
+                    onDragEnd={handleDragEnd}
+                    className={`group flex items-center gap-2 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-all border border-white/10 ${
+                      draggedTodo === todo.id ? 'opacity-50 scale-105' : ''
+                    } ${!todo.completed ? 'cursor-grab active:cursor-grabbing' : ''}`}
                   >
-                    <button
-                      onClick={() => toggleTodoMutation.mutate({ id: todo.id, completed: !todo.completed })}
+                    {!todo.completed && (
+                      <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                    )}
+                    <button 
+                      onClick={() => toggleTodoMutation.mutate({ id: todo.id, completed: !todo.completed })} 
                       className="flex-shrink-0"
                     >
-                      {todo.completed ? (
-                        <CheckSquare className="h-5 w-5 text-primary" />
-                      ) : (
-                        <Square className="h-5 w-5 text-muted-foreground" />
-                      )}
+                      {todo.completed ? 
+                        <CheckCircle className="h-5 w-5 text-emerald-400" /> : 
+                        <Circle className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+                      }
                     </button>
-                    <span className={`flex-1 transition-opacity ${todo.completed ? 'line-through text-muted-foreground opacity-60' : ''}`}>
+                    <span className={`flex-1 text-sm transition-all ${
+                      todo.completed ? 'line-through text-muted-foreground opacity-60' : 'text-foreground'
+                    }`}>
                       {todo.title}
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 flex-shrink-0"
+                    {!todo.completed && (
+                      <select
+                        value={todo.retainUntil ? '1' : '0'}
+                        onChange={(e) => {
+                          const days = e.target.value === '0' ? null : parseInt(e.target.value);
+                          updateRetentionMutation.mutate({ id: todo.id, days });
+                        }}
+                        className="text-xs bg-white/5 border border-white/10 rounded-md px-2 py-1 text-muted-foreground hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <option value="0">Today</option>
+                        <option value="1">+1 day</option>
+                        <option value="2">+2 days</option>
+                        <option value="3">+3 days</option>
+                      </select>
+                    )}
+                    {todo.retainUntil && (
+                      <div title="Task retained">
+                        <Clock className="h-3 w-3 text-cyan-400 flex-shrink-0" />
+                      </div>
+                    )}
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-6 w-6 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" 
                       onClick={() => deleteTodoMutation.mutate(todo.id)}
                     >
-                      <Trash2 className="h-4 w-4 text-destructive" />
+                      <Trash2 className="h-3 w-3 text-pink-400 hover:text-pink-300" />
                     </Button>
                   </div>
                 ))
@@ -324,49 +490,29 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Contests and Quick Actions */}
-        <div className="space-y-6">
-          <ContestList contests={contests} />
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Code2 className="h-5 w-5" />
-                Quick Actions
-              </CardTitle>
-              <CardDescription>
-                Jump to your most used features
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button
-                className="w-full justify-start"
-                variant="outline"
-                onClick={() => setLocation("/workspace")}
-              >
-                <Code2 className="h-4 w-4 mr-2" />
-                Create New Snippet
-              </Button>
-              <Button
-                className="w-full justify-start"
-                variant="outline"
-                onClick={() => setLocation("/snippets")}
-              >
-                <FileCode className="h-4 w-4 mr-2" />
-                View All Snippets
-              </Button>
-              <Button
-                className="w-full justify-start"
-                variant="outline"
-                onClick={() => setLocation("/questions/add")}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add New Question
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
       </div>
+      
+      {/* Bottom Row: Weekly Graph */}
+      <div className="h-[240px] flex-shrink-0">
+        <WeeklyActivityGraph weekData={weeklyData} quote={randomQuote} />
+      </div>
+      </div>
+
+      <FloatingActionButton />
+
+      <GoalSettingsDialog
+        open={goalDialogOpen}
+        onOpenChange={setGoalDialogOpen}
+        goalType={goalDialogType}
+        currentValue={goalDialogType === "daily" ? dailyGoal : streakGoal}
+        onSave={(value) => {
+          if (goalDialogType === "daily") {
+            updateGoalMutation.mutate({ dailyGoal: value });
+          } else {
+            updateGoalMutation.mutate({ streakGoal: value });
+          }
+        }}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { LucideIcon, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +37,11 @@ export function StatsCardWithProgress({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newGoal, setNewGoal] = useState(goal.toString());
 
+  // Sync newGoal when goal prop changes
+  useEffect(() => {
+    setNewGoal(goal.toString());
+  }, [goal]);
+
   // Determine icon color based on card type
   const getIconHoverColor = () => {
     if (title.toLowerCase().includes('streak')) return 'group-hover:text-orange-500';
@@ -68,11 +73,20 @@ export function StatsCardWithProgress({
     return "from-primary via-primary to-primary";
   };
 
+  // Get gradient class based on card type for light theme
+  const getLightGradient = () => {
+    if (title.toLowerCase().includes('streak')) return 'bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-transparent dark:to-transparent';
+    if (title.toLowerCase().includes('problems')) return 'bg-gradient-to-br from-green-50 to-green-100/50 dark:from-transparent dark:to-transparent';
+    if (title.toLowerCase().includes('topic')) return 'bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-transparent dark:to-transparent';
+    if (title.toLowerCase().includes('snippet')) return 'bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-transparent dark:to-transparent';
+    return '';
+  };
+
   return (
     <>
       <Card
         data-testid={`card-stats-${title.toLowerCase().replace(/\s+/g, '-')}`}
-        className="group transition-all hover:shadow-lg relative overflow-hidden"
+        className={`group transition-all hover:shadow-lg relative overflow-hidden ${getLightGradient()}`}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
@@ -122,10 +136,10 @@ export function StatsCardWithProgress({
                 ) : (
                   // Segmented bar for daily goals
                   <div className="h-full flex gap-0.5">
-                    {Array.from({ length: goal }).map((_, i) => (
+                    {Array.from({ length: Math.max(goal, 1) }).map((_, i) => (
                       <div
                         key={i}
-                        className={`flex-1 transition-all duration-300 ${
+                        className={`flex-1 rounded-sm transition-all duration-300 ${
                           i < progress
                             ? `bg-gradient-to-t ${getProgressGradient()}`
                             : 'bg-secondary-foreground/10'
