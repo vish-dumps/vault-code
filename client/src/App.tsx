@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,6 +7,9 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/app-sidebar";
+import { NotificationPopover } from "@/components/notification-popover";
+import { StreakPopover } from "@/components/streak-popover";
+import { ProfilePopover } from "@/components/profile-popover";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Dashboard from "@/pages/dashboard";
 import Questions from "@/pages/questions";
@@ -19,45 +22,7 @@ import Profile from "@/pages/profile";
 import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    window.location.href = '/auth';
-    return null;
-  }
-
-  return <>{children}</>;
-}
-
-function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <Switch>
-        <Route path="/auth" component={AuthPage} />
-        <Route component={AuthPage} />
-      </Switch>
-    );
-  }
-
+function AuthenticatedRoutes() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
@@ -73,31 +38,66 @@ function Router() {
   );
 }
 
-function App() {
+function UnauthenticatedRoutes() {
+  return (
+    <Switch>
+      <Route path="/auth" component={AuthPage} />
+      <Route component={AuthPage} />
+    </Switch>
+  );
+}
+
+function AppContent() {
+  const { isAuthenticated, isLoading } = useAuth();
+  const [location] = useLocation();
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
+  const isDashboard = location === "/";
 
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="text-center text-sm text-muted-foreground">Loading CodeVault...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <UnauthenticatedRoutes />;
+  }
+
+  return (
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full">
+        <AppSidebar />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <header className="flex h-14 items-center justify-between border-b px-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <div className="flex items-center gap-1">
+              <NotificationPopover />
+              <StreakPopover />
+              <ThemeToggle />
+              <ProfilePopover />
+            </div>
+          </header>
+          <main className={`flex-1 ${isDashboard ? "overflow-hidden" : "overflow-auto"}`}>
+            <AuthenticatedRoutes />
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
           <ThemeProvider>
-            <SidebarProvider style={style as React.CSSProperties}>
-              <div className="flex h-screen w-full">
-                <AppSidebar />
-                <div className="flex flex-col flex-1 overflow-hidden">
-                  <header className="flex items-center justify-between h-12 px-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                    <SidebarTrigger data-testid="button-sidebar-toggle" />
-                    <ThemeToggle />
-                  </header>
-                  <main className="flex-1 overflow-auto">
-                    <Router />
-                  </main>
-                </div>
-              </div>
-            </SidebarProvider>
+            <AppContent />
             <Toaster />
           </ThemeProvider>
         </TooltipProvider>

@@ -37,7 +37,7 @@ export function ThemeProvider({
     // Remove animation class after transition
     const timer = setTimeout(() => {
       root.classList.remove('theme-transitioning');
-    }, 600);
+    }, 300);
     
     return () => clearTimeout(timer);
   }, [theme]);

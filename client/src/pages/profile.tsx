@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,12 +25,15 @@ export default function Profile() {
   const { toast } = useToast();
   const [leetcodeUsername, setLeetcodeUsername] = useState("");
   const [codeforcesUsername, setCodeforcesUsername] = useState("");
+  const [profileImage, setProfileImage] = useState("");
   const [avatarType, setAvatarType] = useState<'initials' | 'random' | 'custom'>('initials');
   const [avatarGender, setAvatarGender] = useState<'male' | 'female'>('male');
   const [customAvatarUrl, setCustomAvatarUrl] = useState("");
   const [randomAvatarSeed, setRandomAvatarSeed] = useState<number>(Date.now());
   const [isAvatarDialogOpen, setIsAvatarDialogOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const MAX_PROFILE_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB cap to keep base64 reasonable
 
   // Fetch user profile
   const { data: userProfile } = useQuery<any>({
@@ -57,12 +60,14 @@ export default function Profile() {
     if (userProfile && !isInitialized) {
       setLeetcodeUsername(userProfile.leetcodeUsername || "");
       setCodeforcesUsername(userProfile.codeforcesUsername || "");
+      const storedProfileImage = userProfile.profileImage || "";
+      setProfileImage(storedProfileImage);
       
       // Initialize avatar state from database
       setAvatarType(userProfile.avatarType || 'initials');
       setAvatarGender(userProfile.avatarGender || 'male');
       setCustomAvatarUrl(userProfile.customAvatarUrl || "");
-      setRandomAvatarSeed(userProfile.randomAvatarSeed || Date.now());
+      setRandomAvatarSeed(userProfile.randomAvatarSeed ?? Date.now());
       
       setIsInitialized(true);
     }
@@ -83,80 +88,234 @@ export default function Profile() {
     },
   });
 
+  const normalizeDateKey = (value: string | Date | null | undefined) => {
+    if (!value) return "";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+    return date.toISOString().split("T")[0];
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleProfileImageUpload = (file: File) => {
+    if (file.size > MAX_PROFILE_IMAGE_SIZE) {
+      toast({
+        title: "Image too large",
+        description: "Please choose an image smaller than 2MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      setProfileImage(result);
+      setCustomAvatarUrl("");
+      setAvatarType("custom");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleProfileImageUpload(file);
+    }
+    // Allow re-selecting the same file
+    event.target.value = "";
+  };
+
   const handleSave = () => {
-    saveProfileMutation.mutate({
+    const payload: Record<string, any> = {
       leetcodeUsername: leetcodeUsername.trim() || undefined,
       codeforcesUsername: codeforcesUsername.trim() || undefined,
       avatarType,
       avatarGender,
-      customAvatarUrl: customAvatarUrl.trim() || undefined,
-      randomAvatarSeed,
-    });
+    };
+
+    if (avatarType === "random") {
+      payload.randomAvatarSeed = randomAvatarSeed;
+      payload.profileImage = null;
+      payload.customAvatarUrl = null;
+    } else if (avatarType === "custom") {
+      payload.randomAvatarSeed = null;
+      if (profileImage) {
+        payload.profileImage = profileImage;
+        payload.customAvatarUrl = null;
+      } else if (customAvatarUrl) {
+        payload.profileImage = null;
+        payload.customAvatarUrl = customAvatarUrl.trim() || null;
+      } else {
+        payload.profileImage = null;
+        payload.customAvatarUrl = null;
+      }
+    } else {
+      payload.randomAvatarSeed = null;
+      payload.profileImage = null;
+      payload.customAvatarUrl = null;
+    }
+
+    saveProfileMutation.mutate(payload);
   };
 
   const handleGenerateNewAvatar = () => {
     setRandomAvatarSeed(Date.now());
+    setAvatarType("random");
+    setProfileImage("");
+    setCustomAvatarUrl("");
+  };
+
+  const handleResetAvatar = () => {
+    setAvatarType("initials");
+    setProfileImage("");
+    setCustomAvatarUrl("");
   };
 
   const getAvatarUrl = () => {
-    if (avatarType === 'custom' && customAvatarUrl) {
-      return customAvatarUrl;
+    if (avatarType === "custom") {
+      if (profileImage) {
+        return profileImage;
+      }
+      if (customAvatarUrl) {
+        return customAvatarUrl;
+      }
     }
-    if (avatarType === 'random') {
+    if (avatarType === "random") {
       // Use the correct API format: /public/boy or /public/girl with seed as query param
-      const genderPath = avatarGender === 'male' ? 'boy' : 'girl';
+      const genderPath = avatarGender === "male" ? "boy" : "girl";
       return `https://avatar.iran.liara.run/public/${genderPath}?username=${randomAvatarSeed}`;
     }
     return null;
   };
 
-  // Generate daily activity data from actual questions solved
-  const getDailyActivityData = () => {
-    const data = [];
-    const today = new Date();
-    
-    // Create a map of dates to problem counts
-    const dateCountMap = new Map<string, number>();
-    
+  const todayKey = normalizeDateKey(new Date());
+
+  const heatmapData = useMemo(() => {
+    const counts = new Map<string, number>();
     questions.forEach((question) => {
-      if (question.dateSaved) {
-        const dateKey = new Date(question.dateSaved).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        dateCountMap.set(dateKey, (dateCountMap.get(dateKey) || 0) + 1);
+      const key = normalizeDateKey(question.dateSaved);
+      if (key) {
+        counts.set(key, (counts.get(key) || 0) + 1);
       }
     });
-    
-    // Generate last 30 days
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const results: Array<{ date: string; count: number }> = [];
+
+    for (let i = 364; i >= 0; i--) {
+      const day = new Date(today);
+      day.setDate(today.getDate() - i);
+      const key = normalizeDateKey(day);
+      results.push({ date: key, count: key ? counts.get(key) ?? 0 : 0 });
+    }
+
+    return results;
+  }, [questions]);
+
+  const dailyActivityData = useMemo(() => {
+    const dateCountMap = new Map<string, number>();
+
+    questions.forEach((question) => {
+      const key = normalizeDateKey(question.dateSaved);
+      if (key) {
+        dateCountMap.set(key, (dateCountMap.get(key) || 0) + 1);
+      }
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const data = [];
     for (let i = 29; i >= 0; i--) {
       const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateKey = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      
+      date.setDate(today.getDate() - i);
+      const key = normalizeDateKey(date);
+      const label = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
       data.push({
-        date: dateKey,
-        problems: dateCountMap.get(dateKey) || 0,
+        date: label,
+        problems: key ? dateCountMap.get(key) || 0 : 0,
       });
     }
+
     return data;
-  };
+  }, [questions]);
 
-  const dailyActivityData = getDailyActivityData();
+  const todoHistory = useMemo(() => {
+    const stats = new Map<string, { added: number; completed: number }>();
 
-  // Calculate productivity metrics
-  const todayTodos = todos.filter(t => {
-    const todoDate = new Date(t.createdAt);
-    const today = new Date();
-    return todoDate.toDateString() === today.toDateString();
-  });
-  const tasksAddedDaily = todayTodos.length;
-  const tasksCompletedDaily = todayTodos.filter(t => t.completed).length;
-  
+    todos.forEach((todo) => {
+      const createdKey = normalizeDateKey(todo.createdAt);
+      if (!createdKey) return;
+
+    const createdEntry = stats.get(createdKey) ?? { added: 0, completed: 0 };
+    createdEntry.added += 1;
+
+    if (todo.completed) {
+      const completionKey = normalizeDateKey(todo.completedAt || todo.createdAt);
+      if (completionKey) {
+        if (completionKey === createdKey) {
+          createdEntry.completed += 1;
+        } else {
+          const completionEntry = stats.get(completionKey) ?? { added: 0, completed: 0 };
+          completionEntry.completed += 1;
+          stats.set(completionKey, completionEntry);
+        }
+      } else {
+        createdEntry.completed += 1;
+      }
+    }
+
+      stats.set(createdKey, createdEntry);
+    });
+
+    if (todayKey) {
+      const todayEntry = stats.get(todayKey) ?? { added: 0, completed: 0 };
+      stats.set(todayKey, todayEntry);
+    }
+
+    return Array.from(stats.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, values]) => ({ date, ...values }));
+  }, [todos, todayKey]);
+
+  const todayStats = todoHistory.find((stat) => stat.date === todayKey) ?? { added: 0, completed: 0 };
+  const tasksAddedDaily = todayStats.added;
+  const tasksCompletedDaily = todayStats.completed;
+  const totalTasks = todos.length;
+
   // Calculate consistency metrics
   const currentStreak = userProfile?.streak || 0;
   const maxStreak = userProfile?.maxStreak || currentStreak;
-  const activeDaysLast30 = 15; // Mock - calculate from actual data
-  const daysSinceLastActivity = userProfile?.lastActiveDate 
-    ? Math.floor((new Date().getTime() - new Date(userProfile.lastActiveDate).getTime()) / (1000 * 60 * 60 * 24))
-    : 0;
+  const activeDaysLast30 = heatmapData.slice(-30).filter((day) => day.count > 0).length;
+
+  const fallbackLastActivity = useMemo(() => {
+    const recent = [...heatmapData].reverse().find((day) => day.count > 0);
+    return recent ? new Date(recent.date) : null;
+  }, [heatmapData]);
+
+  const daysSinceLastActivity = useMemo(() => {
+    const baseDate = userProfile?.lastActiveDate ? new Date(userProfile.lastActiveDate) : fallbackLastActivity;
+    if (!baseDate) return 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const reference = new Date(baseDate);
+    reference.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.floor((today.getTime() - reference.getTime()) / (1000 * 60 * 60 * 24)));
+  }, [userProfile?.lastActiveDate, fallbackLastActivity]);
+
+  const consistencyScore = useMemo(() => {
+    const streakScore = maxStreak > 0 ? Math.min(100, (currentStreak / maxStreak) * 100) : currentStreak > 0 ? 100 : 0;
+    const activityScore = (activeDaysLast30 / 30) * 100;
+    const freshnessScore = Math.max(0, Math.min(100, 100 - daysSinceLastActivity * 10));
+    const total = streakScore * 0.4 + activityScore * 0.4 + freshnessScore * 0.2;
+    return parseFloat(total.toFixed(1));
+  }, [currentStreak, maxStreak, activeDaysLast30, daysSinceLastActivity]);
 
   // Get user initials
   const getInitials = () => {
@@ -203,68 +362,95 @@ export default function Profile() {
                       <DialogTitle>Change Avatar</DialogTitle>
                       <DialogDescription>Choose how you want your avatar to appear</DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label>Avatar Type</Label>
-                        <Select value={avatarType} onValueChange={(v: any) => setAvatarType(v)}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="initials">Initials</SelectItem>
-                            <SelectItem value="random">Random Avatar</SelectItem>
-                            <SelectItem value="custom">Custom URL</SelectItem>
-                          </SelectContent>
-                        </Select>
+                    <div className="space-y-6">
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="relative rounded-full p-[2px]">
+                          <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-purple-500/60 via-fuchsia-500/40 to-cyan-400/60 blur-lg" />
+                          <div className="relative rounded-full bg-slate-900/80 p-1">
+                            <Avatar className="h-24 w-24 ring-2 ring-purple-400/40 shadow-[0_24px_80px_rgba(124,58,237,0.35)]">
+                              {getAvatarUrl() && <AvatarImage src={getAvatarUrl()!} alt="Avatar preview" />}
+                              <AvatarFallback className="bg-gradient-to-br from-purple-500 to-sky-500 text-white text-2xl font-semibold">
+                                {getInitials()}
+                              </AvatarFallback>
+                            </Avatar>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground text-center max-w-xs">
+                          Your avatar updates instantly as you upload, randomize, or reset.
+                        </p>
                       </div>
 
-                      {avatarType === 'random' && (
-                        <>
-                          <div>
-                            <Label>Gender</Label>
-                            <Select value={avatarGender} onValueChange={(v: any) => setAvatarGender(v)}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="male">Male</SelectItem>
-                                <SelectItem value="female">Female</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Avatar className="h-16 w-16">
-                              <AvatarImage src={`https://avatar.iran.liara.run/public/${avatarGender === 'male' ? 'boy' : 'girl'}?username=${randomAvatarSeed}`} />
-                              <AvatarFallback>{getInitials()}</AvatarFallback>
-                            </Avatar>
-                            <Button variant="outline" size="sm" onClick={handleGenerateNewAvatar}>
-                              <RefreshCw className="h-4 w-4 mr-2" />
-                              Generate New
-                            </Button>
-                          </div>
-                        </>
+                      <div className="space-y-3">
+                        <Label className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
+                          Random avatar mood
+                        </Label>
+                        <Select
+                          value={avatarGender}
+                          onValueChange={(value) => setAvatarGender(value as "male" | "female")}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a style" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="male">Bold • Adventurous</SelectItem>
+                            <SelectItem value="female">Vivid • Elegant</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          We use this preference whenever you generate a new CodeVault avatar.
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleFileInputChange}
+                        />
+                        <Button onClick={triggerFileUpload} className="w-full">
+                          <Upload className="h-4 w-4 mr-2" />
+                          Upload a photo
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full"
+                          onClick={handleGenerateNewAvatar}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Generate a new look
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="w-full text-rose-500 hover:bg-rose-500/10"
+                          onClick={handleResetAvatar}
+                        >
+                          Remove wallpaper
+                        </Button>
+                      </div>
+
+                      {(profileImage || customAvatarUrl) && (
+                        <p className="text-xs text-muted-foreground text-center">
+                          Uploaded avatars stay private to your account. Max size 2&nbsp;MB.
+                        </p>
                       )}
 
-                      {avatarType === 'custom' && (
-                        <div>
-                          <Label>Image URL</Label>
-                          <Input
-                            value={customAvatarUrl}
-                            onChange={(e) => setCustomAvatarUrl(e.target.value)}
-                            placeholder="https://example.com/avatar.jpg"
-                          />
-                          {customAvatarUrl && (
-                            <Avatar className="h-16 w-16 mt-2">
-                              <AvatarImage src={customAvatarUrl} />
-                              <AvatarFallback>{getInitials()}</AvatarFallback>
-                            </Avatar>
-                          )}
-                        </div>
-                      )}
-
-                      <Button onClick={() => { handleSave(); setIsAvatarDialogOpen(false); }} className="w-full">
-                        Save Avatar
-                      </Button>
+                      <div className="flex justify-end gap-2 pt-2">
+                        <Button variant="outline" onClick={() => setIsAvatarDialogOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            handleSave();
+                            setIsAvatarDialogOpen(false);
+                          }}
+                        >
+                          Save avatar
+                        </Button>
+                      </div>
                     </div>
                   </DialogContent>
                 </Dialog>
@@ -383,7 +569,7 @@ export default function Profile() {
           </Card>
 
           {/* Contribution Heatmap */}
-          <ContributionHeatmap />
+          <ContributionHeatmap data={heatmapData} />
         </div>
 
         <div className="lg:col-span-2 space-y-6">
@@ -405,12 +591,9 @@ export default function Profile() {
           <ProductivityMetricsCard
             tasksAddedDaily={tasksAddedDaily}
             tasksCompletedDaily={tasksCompletedDaily}
-            totalTasks={todos.length}
-            consistencyScore={parseFloat(
-              (((currentStreak / Math.max(maxStreak, 1)) * 100 * 0.4) +
-              ((activeDaysLast30 / 30) * 100 * 0.4) +
-              (Math.max(0, Math.min(100, 100 - (daysSinceLastActivity * 10))) * 0.2)).toFixed(1)
-            )}
+            totalTasks={totalTasks}
+            consistencyScore={consistencyScore}
+            historicalStats={todoHistory}
           />
         </div>
       </div>

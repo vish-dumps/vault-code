@@ -32,3 +32,4 @@ TopicProgressSchema.index({ userId: 1, topic: 1 }, { unique: true });
 
 export const TopicProgress = mongoose.model<ITopicProgress>('TopicProgress', TopicProgressSchema);
 
+

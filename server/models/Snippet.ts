@@ -45,3 +45,4 @@ const SnippetSchema = new Schema<ISnippet>({
 
 export const Snippet = mongoose.model<ISnippet>('Snippet', SnippetSchema);
 
+

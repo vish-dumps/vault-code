@@ -16,11 +16,16 @@ export interface IUser extends Document {
   dailyGoal?: number;
   dailyProgress?: number;
   lastActiveDate?: Date;
+  lastResetDate?: Date;
   avatarType?: 'initials' | 'random' | 'custom';
   avatarGender?: 'male' | 'female';
   customAvatarUrl?: string;
   randomAvatarSeed?: number;
   createdAt: Date;
+  otpCodeHash?: string;
+  otpExpiresAt?: Date;
+  otpSession?: string;
+  otpVerifiedAt?: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -84,6 +89,9 @@ const UserSchema = new Schema<IUser>({
   lastActiveDate: {
     type: Date
   },
+  lastResetDate: {
+    type: Date
+  },
   avatarType: {
     type: String,
     enum: ['initials', 'random', 'custom'],
@@ -100,6 +108,22 @@ const UserSchema = new Schema<IUser>({
   },
   randomAvatarSeed: {
     type: Number
+  },
+  otpCodeHash: {
+    type: String,
+    select: false
+  },
+  otpExpiresAt: {
+    type: Date,
+    select: false
+  },
+  otpSession: {
+    type: String,
+    select: false
+  },
+  otpVerifiedAt: {
+    type: Date,
+    select: false
   }
 }, {
   timestamps: true
@@ -124,4 +148,5 @@ UserSchema.methods.comparePassword = async function(candidatePassword: string): 
 };
 
 export const User = mongoose.model<IUser>('User', UserSchema);
+
 

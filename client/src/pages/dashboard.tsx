@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { motion } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { CheckCircle, Flame, TrendingUp, Plus, FileCode, Code2, Trash2, CheckSquare, Square, Settings, GripVertical, Clock, Circle } from "lucide-react";
@@ -18,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { QuestionWithDetails, TopicProgress } from "@shared/schema";
 
 interface Contest {
@@ -198,7 +200,17 @@ export default function Dashboard() {
   const currentStreak = userProfile?.streak || 0;
   const streakGoal = userProfile?.streakGoal ?? 7;
   const dailyGoal = userProfile?.dailyGoal ?? 3;
-  const dailyProgress = userProfile?.dailyProgress || 0;
+  const todaysQuestionsCount = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return questions.reduce((count, question) => {
+      if (!question.dateSaved) return count;
+      const saved = new Date(question.dateSaved);
+      saved.setHours(0, 0, 0, 0);
+      return saved.getTime() === today.getTime() ? count + 1 : count;
+    }, 0);
+  }, [questions]);
+  const dailyProgress = Math.max(userProfile?.dailyProgress ?? 0, todaysQuestionsCount);
 
   // Filter todos
   const filteredTodos = todos.filter(todo => {
@@ -247,17 +259,34 @@ export default function Dashboard() {
     setDraggedTodo(null);
   };
 
-  // Generate weekly activity data - memoized to prevent re-generation on every render
+  // Generate weekly activity data from real questions (Mon-Sun of current week)
   const weeklyData = useMemo(() => {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const today = new Date().getDay();
-    const adjustedToday = today === 0 ? 6 : today - 1;
-    
-    return days.map((day, index) => ({
-      day,
-      problems: index <= adjustedToday ? Math.floor(Math.random() * 6) : 0,
-    }));
-  }, []); // Empty dependency array means this only runs once
+    const startOfWeek = (() => {
+      const d = new Date();
+      // JS getDay(): Sun=0..Sat=6; we want Mon=0..Sun=6
+      const day = d.getDay();
+      const diff = (day === 0 ? -6 : 1 - day); // move to Monday
+      const monday = new Date(d);
+      monday.setHours(0, 0, 0, 0);
+      monday.setDate(d.getDate() + diff);
+      return monday;
+    })();
+
+    const counts = Array(7).fill(0) as number[]; // Mon..Sun
+    for (const q of questions) {
+      const saved = q.dateSaved ? new Date(q.dateSaved as unknown as string) : undefined;
+      if (!saved) continue;
+      const day = new Date(saved);
+      const dayMid = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+      if (dayMid >= startOfWeek) {
+        const idx = (day.getDay() === 0 ? 6 : day.getDay() - 1); // Mon=0..Sun=6
+        counts[idx] += 1;
+      }
+    }
+
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return labels.map((label, i) => ({ day: label, problems: counts[i] }));
+  }, [questions]);
   const motivationalQuotes = [
     "The only way to do great work is to love what you do.",
     "Code is like humor. When you have to explain it, it's bad.",
@@ -268,24 +297,39 @@ export default function Dashboard() {
   const randomQuote = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
 
   return (
-    <div className="p-3 h-screen overflow-hidden flex flex-col">
-      <div className="mb-2 flex-shrink-0">
-        <div className="text-xs text-muted-foreground">Welcome Back,</div>
-        <h1 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">
-          <span className="bg-gradient-to-r from-[#d397fa] to-[#8364e8] bg-clip-text text-transparent">{user?.name || user?.username || "Coder"}</span>
+    <div className="flex h-full flex-col overflow-hidden bg-gradient-to-br from-background via-background to-purple-50/20 dark:to-purple-950/10 p-4">
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="mb-4 flex-shrink-0"
+      >
+        <div className="text-sm font-medium text-muted-foreground mb-1">Welcome Back,</div>
+        <h1 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-none mb-2">
+          <span className="bg-gradient-to-r from-[#d397fa] via-[#a78bfa] to-[#8364e8] bg-clip-text text-transparent animate-gradient">
+            {user?.name || user?.username || "Coder"}
+          </span>
         </h1>
-        <p className="text-muted-foreground mt-0.5 text-xs">Let's make today count. Keep building your coding skills!</p>
-      </div>
+        <p className="text-muted-foreground text-sm md:text-base">Let&rsquo;s make today count. Keep building your coding skills!</p>
+      </motion.div>
 
       {/* Main Grid Layout */}
-      <div className="flex-1 overflow-hidden flex flex-col gap-2 min-h-0">
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-4">
         {/* Left: 4 Stats Cards in 2x2 Grid - Fixed Size */}
         <div className="lg:col-span-1 min-h-0">
-          <div className="grid grid-cols-2 gap-2 h-full">
+          <div className="grid grid-cols-2 gap-3 h-full">
             {/* Problems Solved - Square with Circular Progress */}
-            <Card className="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/20 dark:to-green-900/10 group hover:shadow-lg transition-all">
-              <CardContent className="p-3 h-full flex flex-col items-center justify-between">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+              className="h-full"
+            >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Card className="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/20 dark:to-green-900/10 group hover:shadow-2xl transition-all duration-300 border-green-200/50 dark:border-green-800/30 h-full">
+                  <CardContent className="p-4 h-full flex flex-col items-center justify-between">
                 <div className="flex items-center justify-between w-full">
                   <span className="text-xs font-medium">Problems</span>
                   <Button
@@ -316,15 +360,34 @@ export default function Dashboard() {
                     <div className="text-xs text-muted-foreground">of {dailyGoal}</div>
                   </div>
                 </div>
-                <div className="text-xs text-muted-foreground text-center">Today's progress</div>
-              </CardContent>
-            </Card>
+                <div className="text-xs text-muted-foreground text-center font-medium">Today's progress</div>
+                  </CardContent>
+                </Card>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="text-xs">
+                  <div>Today: {dailyProgress} of {dailyGoal}</div>
+                  <div>Total saved: {totalProblems}</div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+            </motion.div>
 
-            {/* Streak - Square with Fire Logo */}
-            <Card className="bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-orange-950/20 dark:to-orange-900/10 group hover:shadow-lg transition-all">
-              <CardContent className="p-3 h-full flex flex-col justify-between">
+            {/* Streak - Square with Circular Progress Around Fire Logo */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.2 }}
+              className="h-full"
+            >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Card className="bg-gradient-to-br from-orange-50 to-red-50/50 dark:from-orange-950/20 dark:to-red-900/10 group hover:shadow-2xl transition-all duration-300 border-orange-200/50 dark:border-orange-800/30 h-full overflow-hidden relative">
+              {/* Animated background glow */}
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-400/10 to-red-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <CardContent className="p-4 h-full flex flex-col justify-between relative z-10">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium">Streak</span>
+                  <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">Streak</span>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -338,62 +401,164 @@ export default function Dashboard() {
                   </Button>
                 </div>
                 <div className="text-center flex-1 flex flex-col justify-center items-center">
-                  <div className="relative w-20 h-20 flex items-center justify-center">
-                    {/* Fire SVG Logo */}
-                    <img 
-                      src="/fire-streak.svg" 
-                      alt="Fire" 
-                      className={`w-full h-full ${currentStreak >= streakGoal ? 'animate-pulse' : ''}`}
-                    />
-                    {/* Streak number overlay */}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-2xl font-black text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">{currentStreak}</span>
+                  <div className="relative w-24 h-24 flex items-center justify-center">
+                    {/* Circular Progress Ring */}
+                    <svg className="absolute inset-0 w-full h-full transform -rotate-90">
+                      <circle 
+                        cx="48" 
+                        cy="48" 
+                        r="44" 
+                        stroke="currentColor" 
+                        strokeWidth="4" 
+                        fill="none" 
+                        className="text-orange-200/30 dark:text-orange-900/30" 
+                      />
+                      <motion.circle
+                        initial={{ strokeDashoffset: 2 * Math.PI * 44 }}
+                        animate={{ strokeDashoffset: 2 * Math.PI * 44 * (1 - Math.min(currentStreak / streakGoal, 1)) }}
+                        transition={{ duration: 1, ease: "easeOut" }}
+                        cx="48" 
+                        cy="48" 
+                        r="44" 
+                        stroke="url(#streakGradient)" 
+                        strokeWidth="4" 
+                        fill="none" 
+                        strokeLinecap="round"
+                        strokeDasharray={`${2 * Math.PI * 44}`}
+                        className="drop-shadow-lg"
+                      />
+                      <defs>
+                        <linearGradient id="streakGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#f97316" />
+                          <stop offset="50%" stopColor="#ea580c" />
+                          <stop offset="100%" stopColor="#dc2626" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    {/* Fire Logo with Negative Space Text */}
+                    <div className="relative w-16 h-16">
+                      <svg viewBox="0 0 490 522" className={`w-full h-full ${currentStreak >= streakGoal ? 'animate-pulse' : ''}`} xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                          <linearGradient id="fireGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stopColor="#f97316" />
+                            <stop offset="50%" stopColor="#ea580c" />
+                            <stop offset="100%" stopColor="#dc2626" />
+                          </linearGradient>
+                          <mask id="textMask">
+                            <rect width="490" height="522" fill="white" />
+                            <text 
+                              x="245" 
+                              y="340" 
+                              fontSize="200" 
+                              fontWeight="900" 
+                              textAnchor="middle" 
+                              fill="black"
+                              fontFamily="system-ui, -apple-system, sans-serif"
+                            >
+                              {currentStreak}
+                            </text>
+                          </mask>
+                        </defs>
+                        <path 
+                          fill="url(#fireGradient)" 
+                          mask="url(#textMask)"
+                          d="M72.72,418.38c-20.9-41.31-26.52-92.22-19.86-135.61,5.72-37.26,26.02-88.2,63.49-107.32,16.68-8.51,10.55,18.38,10.55,18.38,0,0-5.11,58.55,11.57,72.17,14.98-80.34,62.98-100.09,73.87-135.49s9.53-50.8-16.68-81.36c-12.26-15.32,27.57-11.23,27.57-11.23,0,0,102.81,7.15,114.72,116.43,7.49,63.66-11.91,63.66-5.79,102.81,6.13,39.15,36.77,21.11,43.24,12.93,7.75-9.8,12.54-31.92,25.86-13.27,38.57,53.99,39.54,128.58-.53,182.01-38.43,51.24-104.52,77.51-167.63,74.36-16.85-.84-33.6-3.84-49.61-9.21-25.93-8.69-51.95-19.72-73.16-37.34-15.8-13.12-28.25-29.73-37.63-48.26Z" 
+                        />
+                      </svg>
                     </div>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">{currentStreak === 1 ? 'day' : 'days'}</div>
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-xs text-muted-foreground mt-1 font-medium"
+                  >
+                    {currentStreak === 1 ? 'day' : 'days'}
+                  </motion.div>
                 </div>
-                {/* Progress bar for streak goal */}
-                <div className="space-y-1">
-                  <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-orange-400 to-orange-600 transition-all duration-500" 
-                      style={{ width: `${Math.min((currentStreak / streakGoal) * 100, 100)}%` }} 
-                    />
-                  </div>
-                  <div className="text-xs text-muted-foreground text-center">{currentStreak}/{streakGoal} goal</div>
+                <div className="text-[10px] text-center text-muted-foreground font-medium">
+                  {currentStreak}/{streakGoal} goal • {Math.round((currentStreak / streakGoal) * 100)}%
                 </div>
               </CardContent>
-            </Card>
+                </Card>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="text-xs">
+                  <div>Current: {currentStreak} days</div>
+                  <div>Goal: {streakGoal} days</div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+            </motion.div>
 
             {/* Top Topic - Square */}
-            <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/20 dark:to-blue-900/10 hover:shadow-lg transition-all">
-              <CardContent className="p-3 h-full flex flex-col items-center justify-center text-center">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.3 }}
+              className="h-full"
+            >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/20 dark:to-blue-900/10 hover:shadow-2xl transition-all duration-300 border-blue-200/50 dark:border-blue-800/30 h-full">
+                  <CardContent className="p-4 h-full flex flex-col items-center justify-center text-center">
                 <TrendingUp className="h-6 w-6 text-blue-500 mb-2" />
                 <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 truncate max-w-full">{topTopic}</div>
-                <p className="text-xs font-medium mt-1">Top Topic</p>
-                <p className="text-xs text-muted-foreground">{topTopicCount > 0 ? `${topTopicCount} solved` : 'Start solving!'}</p>
-              </CardContent>
-            </Card>
+                <p className="text-xs font-semibold mt-1">Top Topic</p>
+                <p className="text-xs text-muted-foreground font-medium">{topTopicCount > 0 ? `${topTopicCount} solved` : 'Start solving!'}</p>
+                  </CardContent>
+                </Card>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="text-xs">Based on tags in your saved problems</div>
+              </TooltipContent>
+            </Tooltip>
+            </motion.div>
 
             {/* Code Snippets - Square */}
-            <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/20 dark:to-purple-900/10 hover:shadow-lg transition-all">
-              <CardContent className="p-3 h-full flex flex-col items-center justify-center text-center">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.4 }}
+              className="h-full"
+            >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/20 dark:to-purple-900/10 hover:shadow-2xl transition-all duration-300 border-purple-200/50 dark:border-purple-800/30 h-full">
+                  <CardContent className="p-4 h-full flex flex-col items-center justify-center text-center">
                 <FileCode className="h-6 w-6 text-purple-500 mb-2" />
                 <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{snippets.length}</div>
-                <p className="text-xs font-medium mt-1">Code Snippets</p>
-                <p className="text-xs text-muted-foreground">Saved</p>
-              </CardContent>
-            </Card>
+                <p className="text-xs font-semibold mt-1">Code Snippets</p>
+                <p className="text-xs text-muted-foreground font-medium">Saved</p>
+                  </CardContent>
+                </Card>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="text-xs">Total snippets saved</div>
+              </TooltipContent>
+            </Tooltip>
+            </motion.div>
           </div>
         </div>
 
         {/* Middle: Contests */}
-        <div className="lg:col-span-1 h-full overflow-hidden min-h-0">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          className="lg:col-span-1 h-full overflow-hidden min-h-0"
+        >
           <ContestList contests={contests} />
-        </div>
+        </motion.div>
 
         {/* Right: TODO List - Full Height Sidebar */}
-        <Card className="lg:col-span-2 lg:row-span-1 flex flex-col h-full overflow-hidden min-h-0 bg-gradient-to-br from-cyan-50/50 to-blue-50/50 dark:from-cyan-950/10 dark:to-blue-950/10 border-cyan-200/50 dark:border-cyan-800/30">
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.4, delay: 0.3 }}
+          className="lg:col-span-2 lg:row-span-1 h-full min-h-0"
+        >
+        <Card className="flex flex-col h-full overflow-hidden bg-gradient-to-br from-cyan-50/50 to-blue-50/50 dark:from-cyan-950/10 dark:to-blue-950/10 border-cyan-200/50 dark:border-cyan-800/30 shadow-lg hover:shadow-2xl transition-all duration-300">
           <CardHeader className="pb-2 flex-shrink-0 border-b border-cyan-200/30 dark:border-cyan-800/20">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
@@ -490,12 +655,18 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+        </motion.div>
       </div>
       
       {/* Bottom Row: Weekly Graph */}
-      <div className="h-[240px] flex-shrink-0">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.5 }}
+        className="h-[240px] flex-shrink-0"
+      >
         <WeeklyActivityGraph weekData={weeklyData} quote={randomQuote} />
-      </div>
+      </motion.div>
       </div>
 
       <FloatingActionButton />

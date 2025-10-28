@@ -12,6 +12,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 
 const menuItems = [
@@ -87,11 +88,12 @@ export function AppSidebar() {
               tooltip={user?.name || user?.username || "User"}
             >
               <Link href="/profile">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-xs font-semibold">
+                <Avatar className="h-8 w-8 border border-border/30">
+                  <AvatarImage src={user?.avatarUrl ?? undefined} alt={user?.username} />
+                  <AvatarFallback className="bg-primary/10 text-xs font-semibold">
                     {(user?.name || user?.username || "U").charAt(0).toUpperCase()}
-                  </span>
-                </div>
+                  </AvatarFallback>
+                </Avatar>
                 <span className="truncate">{user?.name || user?.username}</span>
               </Link>
             </SidebarMenuButton>

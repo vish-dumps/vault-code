@@ -1,9 +1,29 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import { User as UserModel } from './models/User';
 import { generateToken, authenticateToken, AuthRequest } from './auth';
 import { z } from 'zod';
+import { sendOtpEmail } from './services/email';
 
 const router = Router();
+const OTP_LENGTH = parseInt(process.env.OTP_LENGTH || '6', 10);
+const OTP_EXPIRY_MINUTES = parseInt(process.env.OTP_EXPIRY_MINUTES || '5', 10);
+const OTP_EXPIRY_MS = OTP_EXPIRY_MINUTES * 60 * 1000;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+function generateOtpCode(length = OTP_LENGTH): string {
+  const max = 10 ** length;
+  const code = crypto.randomInt(0, max).toString().padStart(length, '0');
+  return code;
+}
+
+function hashOtpCode(code: string): string {
+  return crypto.createHash('sha256').update(code).digest('hex');
+}
+
+function createOtpSessionToken(): string {
+  return crypto.randomBytes(24).toString('hex');
+}
 
 // Validation schemas
 const registerSchema = z.object({
@@ -11,6 +31,7 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   name: z.string().optional(),
+  avatarGender: z.enum(['male', 'female']),
 });
 
 const loginSchema = z.object({
@@ -18,10 +39,16 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
+const verifyOtpSchema = z.object({
+  email: z.string().email(),
+  otp: z.string().length(OTP_LENGTH),
+  otpSession: z.string().min(16),
+});
+
 // Register endpoint
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { username, email, password, name } = registerSchema.parse(req.body);
+    const { username, email, password, name, avatarGender } = registerSchema.parse(req.body);
 
     // Check if user already exists
     const existingUser = await UserModel.findOne({
@@ -36,11 +63,15 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     // Create new user
+    const randomAvatarSeed = Date.now();
     const user = new UserModel({
       username,
       email,
       password,
       name,
+      avatarType: 'random',
+      avatarGender,
+      randomAvatarSeed,
     });
 
     await user.save();
@@ -63,6 +94,17 @@ router.post('/register', async (req: Request, res: Response) => {
         leetcodeUsername: user.leetcodeUsername,
         codeforcesUsername: user.codeforcesUsername,
         streak: user.streak,
+        maxStreak: user.maxStreak,
+        streakGoal: user.streakGoal,
+        dailyGoal: user.dailyGoal,
+        dailyProgress: user.dailyProgress,
+        profileImage: user.profileImage,
+        avatarType: user.avatarType,
+        avatarGender: user.avatarGender,
+        customAvatarUrl: user.customAvatarUrl,
+        randomAvatarSeed: user.randomAvatarSeed,
+        lastActiveDate: user.lastActiveDate,
+        lastResetDate: user.lastResetDate,
         createdAt: user.createdAt,
       }
     });
@@ -95,7 +137,81 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Generate JWT token
+    const otpCode = generateOtpCode();
+    const otpSession = createOtpSessionToken();
+    const otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+    user.set({
+      otpCodeHash: hashOtpCode(otpCode),
+      otpExpiresAt,
+      otpSession,
+      otpVerifiedAt: undefined,
+    });
+    await user.save();
+
+    await sendOtpEmail({
+      to: user.email,
+      code: otpCode,
+      expiresAt: otpExpiresAt,
+    });
+
+    if (!IS_PRODUCTION) {
+      console.info(
+        `[Auth] OTP for ${user.email}: ${otpCode} (expires in ${OTP_EXPIRY_MINUTES} minutes)`
+      );
+    }
+
+    res.json({
+      message: 'OTP verification required',
+      otpRequired: true,
+      otpSession,
+      expiresIn: OTP_EXPIRY_MS,
+      ...(IS_PRODUCTION ? {} : { debugOtp: otpCode }),
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ 
+        error: 'Validation error', 
+        details: error.errors 
+      });
+    }
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
+// OTP verification endpoint
+router.post('/login/verify', async (req: Request, res: Response) => {
+  try {
+    const { email, otp, otpSession } = verifyOtpSchema.parse(req.body);
+    const user = await UserModel.findOne({ email }).select(
+      '+otpCodeHash +otpExpiresAt +otpSession'
+    );
+
+    if (!user || !user.otpCodeHash || !user.otpExpiresAt || !user.otpSession) {
+      return res.status(400).json({ error: 'Verification code not found' });
+    }
+
+    if (user.otpSession !== otpSession) {
+      return res.status(400).json({ error: 'Invalid verification session' });
+    }
+
+    if (user.otpExpiresAt.getTime() < Date.now()) {
+      return res.status(400).json({ error: 'Verification code expired' });
+    }
+
+    const providedHash = hashOtpCode(otp);
+    if (providedHash !== user.otpCodeHash) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    user.set({
+      otpCodeHash: undefined,
+      otpExpiresAt: undefined,
+      otpSession: undefined,
+      otpVerifiedAt: new Date(),
+    });
+    await user.save();
+
     const token = generateToken({
       userId: user._id.toString(),
       username: user.username,
@@ -113,6 +229,17 @@ router.post('/login', async (req: Request, res: Response) => {
         leetcodeUsername: user.leetcodeUsername,
         codeforcesUsername: user.codeforcesUsername,
         streak: user.streak,
+        maxStreak: user.maxStreak,
+        streakGoal: user.streakGoal,
+        dailyGoal: user.dailyGoal,
+        dailyProgress: user.dailyProgress,
+        profileImage: user.profileImage,
+        avatarType: user.avatarType,
+        avatarGender: user.avatarGender,
+        customAvatarUrl: user.customAvatarUrl,
+        randomAvatarSeed: user.randomAvatarSeed,
+        lastActiveDate: user.lastActiveDate,
+        lastResetDate: user.lastResetDate,
         createdAt: user.createdAt,
       }
     });
@@ -123,8 +250,8 @@ router.post('/login', async (req: Request, res: Response) => {
         details: error.errors 
       });
     }
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Failed to login' });
+    console.error('OTP verification error:', error);
+    res.status(500).json({ error: 'Failed to verify code' });
   }
 });
 
@@ -145,6 +272,17 @@ router.get('/verify', authenticateToken, async (req: AuthRequest, res: Response)
         leetcodeUsername: user.leetcodeUsername,
         codeforcesUsername: user.codeforcesUsername,
         streak: user.streak,
+        maxStreak: user.maxStreak,
+        streakGoal: user.streakGoal,
+        dailyGoal: user.dailyGoal,
+        dailyProgress: user.dailyProgress,
+        profileImage: user.profileImage,
+        avatarType: user.avatarType,
+        avatarGender: user.avatarGender,
+        customAvatarUrl: user.customAvatarUrl,
+        randomAvatarSeed: user.randomAvatarSeed,
+        lastActiveDate: user.lastActiveDate,
+        lastResetDate: user.lastResetDate,
         createdAt: user.createdAt,
       }
     });
@@ -155,4 +293,5 @@ router.get('/verify', authenticateToken, async (req: AuthRequest, res: Response)
 });
 
 export default router;
+
 

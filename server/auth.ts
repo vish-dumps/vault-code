@@ -1,9 +1,9 @@
-import jwt from 'jsonwebtoken';
+import jwt, { type SignOptions, type Secret } from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import { User as UserModel, IUser } from './models/User';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_SECRET: Secret = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '7d') as SignOptions['expiresIn'];
 
 export interface AuthRequest extends Request {
   user?: {
@@ -20,7 +20,8 @@ export interface JWTPayload {
 }
 
 export function generateToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  const options: SignOptions = { expiresIn: JWT_EXPIRES_IN };
+  return jwt.sign(payload, JWT_SECRET, options);
 }
 
 export function verifyToken(token: string): JWTPayload | null {
@@ -65,4 +66,5 @@ export async function authenticateToken(req: AuthRequest, res: Response, next: N
 export function getUserId(req: AuthRequest): string {
   return req.user?.id || '';
 }
+
 

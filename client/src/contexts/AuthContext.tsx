@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { apiRequest } from '@/lib/queryClient';
 
+type AvatarType = 'initials' | 'random' | 'custom';
+type AvatarGender = 'male' | 'female';
+
 interface User {
   id: string;
   username: string;
@@ -10,13 +13,37 @@ interface User {
   codeforcesUsername?: string;
   streak: number;
   createdAt: string;
+  profileImage?: string | null;
+  avatarType?: AvatarType;
+  avatarGender?: AvatarGender;
+  customAvatarUrl?: string | null;
+  randomAvatarSeed?: number | null;
+  avatarUrl?: string | null;
 }
+
+type LoginResult =
+  | {
+      status: "otp_required";
+      otpSession: string;
+      expiresIn: number;
+      debugOtp?: string;
+    }
+  | {
+      status: "authenticated";
+    };
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (username: string, email: string, password: string, name?: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  verifyOtp: (email: string, otp: string, otpSession: string) => Promise<void>;
+  register: (
+    username: string,
+    email: string,
+    password: string,
+    name: string | undefined,
+    avatarGender: AvatarGender
+  ) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -34,6 +61,32 @@ export function useAuth() {
 
 interface AuthProviderProps {
   children: ReactNode;
+}
+
+function computeAvatarUrl(data: Partial<User> | null | undefined): string | null {
+  if (!data) return null;
+
+  if (data.avatarType === 'custom') {
+    if (data.profileImage) return data.profileImage;
+    if (data.customAvatarUrl) return data.customAvatarUrl;
+  }
+
+  if (data.avatarType === 'random') {
+    const genderPath = data.avatarGender === 'female' ? 'girl' : 'boy';
+    const seed = String(
+      data.randomAvatarSeed ?? data.id ?? data.username ?? 'codevault'
+    );
+    return `https://avatar.iran.liara.run/public/${genderPath}?username=${seed}`;
+  }
+
+  return null;
+}
+
+function mapUser(data: any): User {
+  return {
+    ...data,
+    avatarUrl: computeAvatarUrl(data),
+  };
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -60,7 +113,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       if (response.ok) {
         const data = await response.json();
-        setUser(data.user);
+        setUser(mapUser(data.user));
       } else {
         // Token is invalid, remove it
         localStorage.removeItem('authToken');
@@ -75,7 +128,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<LoginResult> => {
     try {
       const response = await apiRequest('POST', '/api/auth/login', {
         email,
@@ -88,25 +141,67 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const data = await response.json();
+      if (data.otpRequired) {
+        return {
+          status: 'otp_required',
+          otpSession: data.otpSession,
+          expiresIn: data.expiresIn,
+          debugOtp: data.debugOtp,
+        };
+      }
+
       const { token: newToken, user: userData } = data;
 
       // Store token and user data
       localStorage.setItem('authToken', newToken);
       setToken(newToken);
-      setUser(userData);
+      setUser(mapUser(userData));
+      return { status: 'authenticated' };
     } catch (error) {
       console.error('Login error:', error);
       throw error;
     }
   };
 
-  const register = async (username: string, email: string, password: string, name?: string) => {
+  const verifyOtp = async (email: string, otp: string, otpSession: string) => {
+    try {
+      const response = await apiRequest('POST', '/api/auth/login/verify', {
+        email,
+        otp,
+        otpSession,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'OTP verification failed');
+      }
+
+      const data = await response.json();
+      const { token: newToken, user: userData } = data;
+
+      localStorage.setItem('authToken', newToken);
+      setToken(newToken);
+      setUser(mapUser(userData));
+    } catch (error) {
+      console.error('OTP verification error:', error);
+      throw error;
+    }
+  };
+
+  const register = async (
+    username: string,
+    email: string,
+    password: string,
+    name: string | undefined,
+    avatarGender: AvatarGender
+  ) => {
     try {
       const response = await apiRequest('POST', '/api/auth/register', {
         username,
         email,
         password,
         name,
+        avatarGender,
       });
 
       if (!response.ok) {
@@ -120,7 +215,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Store token and user data
       localStorage.setItem('authToken', newToken);
       setToken(newToken);
-      setUser(userData);
+      setUser(mapUser(userData));
     } catch (error) {
       console.error('Registration error:', error);
       throw error;
@@ -137,6 +232,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     token,
     login,
+    verifyOtp,
     register,
     logout,
     isLoading,
@@ -149,4 +245,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     </AuthContext.Provider>
   );
 }
+
+export type { LoginResult };
+
 

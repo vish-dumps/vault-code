@@ -254,15 +254,21 @@ export class MongoStorage implements IStorage {
       id: user._id.toString(),
       username: user.username,
       email: user.email,
-      name: user.name || null,
-      profileImage: user.profileImage || null,
-      leetcodeUsername: user.leetcodeUsername || null,
-      codeforcesUsername: user.codeforcesUsername || null,
-      streak: user.streak,
-      streakGoal: user.streakGoal || null,
-      dailyGoal: user.dailyGoal || null,
-      dailyProgress: user.dailyProgress || null,
-      lastActiveDate: user.lastActiveDate || null,
+      name: user.name ?? null,
+      profileImage: user.profileImage ?? null,
+      leetcodeUsername: user.leetcodeUsername ?? null,
+      codeforcesUsername: user.codeforcesUsername ?? null,
+      streak: user.streak ?? 0,
+      maxStreak: user.maxStreak ?? 0,
+      streakGoal: user.streakGoal ?? 7,
+      dailyGoal: user.dailyGoal ?? 3,
+      dailyProgress: user.dailyProgress ?? 0,
+      lastActiveDate: user.lastActiveDate ?? null,
+      lastResetDate: user.lastResetDate ?? null,
+      avatarType: (user.avatarType as User["avatarType"]) ?? "initials",
+      avatarGender: (user.avatarGender as User["avatarGender"]) ?? "male",
+      customAvatarUrl: user.customAvatarUrl ?? null,
+      randomAvatarSeed: user.randomAvatarSeed ?? null,
       createdAt: user.createdAt,
     };
   }
@@ -316,4 +322,5 @@ export class MongoStorage implements IStorage {
 }
 
 export const mongoStorage = new MongoStorage();
+
 
