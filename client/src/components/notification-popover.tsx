@@ -23,8 +23,20 @@ export function NotificationPopover() {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const now = new Date();
 
-  const questionsToday = questions.filter(q => {
+  const toTimestamp = (value: QuestionWithDetails["dateSaved"]) => {
+    if (!value) return 0;
+    const date = value instanceof Date ? value : new Date(value);
+    const time = date.getTime();
+    return Number.isNaN(time) ? 0 : time;
+  };
+
+  const sortedQuestions = [...questions].sort(
+    (a, b) => toTimestamp(b.dateSaved) - toTimestamp(a.dateSaved)
+  );
+
+  const questionsToday = sortedQuestions.filter((q) => {
     const ds = q.dateSaved ? new Date(q.dateSaved as unknown as string) : null;
     if (!ds) return false;
     const dm = new Date(ds.getFullYear(), ds.getMonth(), ds.getDate());
@@ -36,6 +48,28 @@ export function NotificationPopover() {
   const streakGoal = userProfile?.streakGoal ?? 7;
 
   const notifications: Notification[] = [];
+  const latestQuestion = sortedQuestions[0];
+  if (latestQuestion?.dateSaved) {
+    const latestDate = new Date(latestQuestion.dateSaved as unknown as string);
+    const diffMs = now.getTime() - latestDate.getTime();
+    if (!Number.isNaN(diffMs) && diffMs >= 0 && diffMs <= 1000 * 60 * 60) {
+      const relative =
+        diffMs < 1000 * 60
+          ? "Just now"
+          : diffMs < 1000 * 60 * 60
+            ? `${Math.round(diffMs / (1000 * 60))} min ago`
+            : latestDate.toLocaleTimeString();
+      notifications.push({
+        id: `question_${latestQuestion.id}`,
+        type: "achievement",
+        title: "New question saved",
+        message: latestQuestion.title,
+        time: relative,
+        read: false,
+      });
+    }
+  }
+
   if (questionsToday > 0) {
     notifications.push({
       id: "q_today",
@@ -184,4 +218,3 @@ export function NotificationPopover() {
     </Popover>
   );
 }
-

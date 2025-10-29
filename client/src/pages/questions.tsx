@@ -27,6 +27,22 @@ export default function Questions() {
 
   const { data: questions = [], isLoading } = useQuery<QuestionWithDetails[]>({
     queryKey: ["/api/questions"],
+    refetchInterval: 30000,
+  });
+
+  const toTimestamp = (value: QuestionWithDetails["dateSaved"]) => {
+    if (!value) return 0;
+    const date = value instanceof Date ? value : new Date(value);
+    const time = date.getTime();
+    return Number.isNaN(time) ? 0 : time;
+  };
+
+  const sortedQuestions = [...questions].sort((a, b) => {
+    const diff = toTimestamp(b.dateSaved) - toTimestamp(a.dateSaved);
+    if (diff !== 0) return diff;
+    const idB = typeof b.id === "number" ? b.id : parseInt(String(b.id), 10) || 0;
+    const idA = typeof a.id === "number" ? a.id : parseInt(String(a.id), 10) || 0;
+    return idB - idA;
   });
 
   // Delete question mutation
@@ -44,9 +60,9 @@ export default function Questions() {
   });
 
   // Get all unique tags from questions
-  const allTags = Array.from(new Set(questions.flatMap(q => q.tags || [])));
+  const allTags = Array.from(new Set(sortedQuestions.flatMap((q) => q.tags || [])));
 
-  const filteredQuestions = questions.filter((q) => {
+  const filteredQuestions = sortedQuestions.filter((q) => {
     const matchesSearch = q.title.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDifficulty =
       difficultyFilter === "all" || q.difficulty === difficultyFilter;

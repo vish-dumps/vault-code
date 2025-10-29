@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>CodeVault Smart Saver</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="heading">
+        <h1>CodeVault Saver</h1>
+        <p class="subtitle">Capture and sync competitive programming progress instantly.</p>
+      </header>
+
+      <section id="status-banner" class="banner hidden"></section>
+
+      <section id="loading-card" class="card">
+        <p class="muted">Preparing extension…</p>
+      </section>
+
+      <section id="auth-section" class="card hidden">
+        <h2>Connect to CodeVault</h2>
+        <p class="muted">
+          Sign in with your CodeVault credentials or import the session from an open CodeVault tab.
+        </p>
+
+        <form id="login-form" class="stack">
+          <div class="form-group">
+            <label for="login-email">Email</label>
+            <input id="login-email" type="email" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <input id="login-password" type="password" autocomplete="current-password" required />
+          </div>
+          <div id="otp-container" class="form-group hidden">
+            <label for="login-otp">Verification Code</label>
+            <input
+              id="login-otp"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              autocomplete="one-time-code"
+              placeholder="Enter the OTP sent to your email"
+            />
+            <small class="muted">One-time code required for secure login.</small>
+          </div>
+          <button id="login-submit" class="primary-button full-width">
+            <span class="label">Sign In</span>
+            <span class="spinner hidden"></span>
+          </button>
+        </form>
+
+        <div class="divider"><span>or</span></div>
+
+        <button id="import-from-tab" class="secondary-button full-width">
+          Use Active CodeVault Tab
+        </button>
+        <p class="hint">
+          Open the CodeVault app in another tab, log in, keep that tab active, and click the button above.
+        </p>
+      </section>
+
+      <section id="main-section" class="hidden">
+        <div class="user-strip">
+          <div class="user-details">
+            <div id="user-avatar" class="avatar">CV</div>
+            <div>
+              <p id="user-name" class="user-name">CodeVault User</p>
+              <p id="user-email" class="user-email muted">user@example.com</p>
+            </div>
+          </div>
+          <div class="user-actions">
+            <button id="open-app" class="link-button">Open App</button>
+            <button id="logout-button" class="link-button danger">Log out</button>
+          </div>
+        </div>
+
+        <div class="problem-header">
+          <h2>Detected Problem</h2>
+          <button id="refresh-problem" class="link-button">Refresh</button>
+        </div>
+
+        <section class="form-group">
+          <label for="problem-title">Problem Title</label>
+          <input id="problem-title" type="text" placeholder="Loading..." />
+        </section>
+
+        <section class="form-group two-column">
+          <div>
+            <label for="platform">Platform</label>
+            <input id="platform" type="text" disabled />
+          </div>
+          <div>
+            <label for="problem-difficulty">Difficulty</label>
+            <input id="problem-difficulty" type="text" disabled />
+          </div>
+        </section>
+
+        <section class="form-group">
+          <label for="difficulty-override">Set Difficulty</label>
+          <select id="difficulty-override">
+            <option value="auto">Auto (use detected)</option>
+            <option value="Easy">Easy</option>
+            <option value="Medium">Medium</option>
+            <option value="Hard">Hard</option>
+          </select>
+          <small id="difficulty-hint" class="muted">
+            Override the detected difficulty when the source does not provide one.
+          </small>
+        </section>
+
+        <section class="form-group">
+          <label for="problem-tags">Tags</label>
+          <input
+            id="problem-tags"
+            type="text"
+            placeholder="Comma separated (auto-detected when possible)"
+          />
+        </section>
+
+        <section class="form-group">
+          <label for="problem-notes">Notes</label>
+          <textarea
+            id="problem-notes"
+            rows="4"
+            placeholder="Add personal insights or reminders (optional)"
+          ></textarea>
+        </section>
+
+      <section class="form-group">
+        <label for="problem-code">Code Snippet</label>
+        <textarea
+          id="problem-code"
+          rows="8"
+          placeholder="Detected solution code appears here"
+        ></textarea>
+      </section>
+
+      <button id="save-problem" class="primary-button full-width">
+        <span class="label">Save to CodeVault</span>
+        <span class="spinner hidden"></span>
+        <span class="checkmark hidden">✓</span>
+      </button>
+
+        <details class="settings">
+          <summary>Advanced Settings</summary>
+          <section class="form-group">
+            <label for="api-base-url">API Base URL</label>
+            <input id="api-base-url" type="url" placeholder="https://your-codevault-api.com" />
+            <small class="muted">
+              Update if your self-hosted environment uses a different origin or port.
+            </small>
+          </section>
+          <section class="settings-actions">
+            <button id="save-settings" class="secondary-button">Save Settings</button>
+            <button id="clear-settings" class="link-button" type="button">Reset</button>
+          </section>
+        </details>
+      </section>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
