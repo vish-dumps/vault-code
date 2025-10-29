@@ -13,6 +13,34 @@ interface RegisterFormProps {
   compact?: boolean;
 }
 
+const COOL_PALETTE = {
+  containerBg: 'rgba(0,29,38,0.9)',
+  containerShadow: '0 40px 140px rgba(148,210,189,0.32)',
+  accentBullet: '#0a9396',
+  focusClass: 'focus:border-[#0a9396] focus:ring-[#0a9396]/50',
+  gradient: 'from-[#0a9396] via-[#94d2bd] to-[#e9d8a6]',
+  buttonHoverShadow: 'hover:shadow-[0_32px_90px_rgba(148,210,189,0.35)]',
+  buttonShadow: '0 24px 70px rgba(148,210,189,0.35)',
+  selectBg: 'bg-[#001f29]',
+  headerTextClass: 'text-[#94d2bd]/80',
+  linkClass: 'text-[#0a9396] hover:text-[#ee9b00]',
+  imageOverlay: 'from-[#0a9396]/15 via-transparent to-[#94d2bd]/28',
+};
+
+const WARM_PALETTE = {
+  containerBg: 'rgba(59,12,8,0.9)',
+  containerShadow: '0 40px 140px rgba(238,155,0,0.35)',
+  accentBullet: '#ee9b00',
+  focusClass: 'focus:border-[#ee9b00] focus:ring-[#ee9b00]/50',
+  gradient: 'from-[#ee9b00] via-[#ca6702] to-[#9b2226]',
+  buttonHoverShadow: 'hover:shadow-[0_32px_90px_rgba(238,155,0,0.38)]',
+  buttonShadow: '0 24px 70px rgba(238,155,0,0.35)',
+  selectBg: 'bg-[#3b1411]',
+  headerTextClass: 'text-[#e9d8a6]/80',
+  linkClass: 'text-[#ee9b00] hover:text-[#94d2bd]',
+  imageOverlay: 'from-[#ee9b00]/22 via-transparent to-[#bb3e03]/30',
+};
+
 export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: RegisterFormProps) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -23,6 +51,8 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { register } = useAuth();
+
+  const palette = compact ? WARM_PALETTE : COOL_PALETTE;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,25 +80,10 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
     }
   };
 
-  const containerBg = compact ? '#221132cc' : '#0b1a2dcc';
-  const containerShadow = compact
-    ? '0 40px 140px rgba(236,72,153,0.32)'
-    : '0 40px 140px rgba(56,189,248,0.28)';
-  const buttonGradient = compact
-    ? 'from-[#f472b6] via-[#c084fc] to-[#f97316]'
-    : 'from-[#38bdf8] via-[#60a5fa] to-[#f97316]';
-  const accentBullet = compact ? '#f472b6' : '#f97316';
-  const buttonHoverShadow = compact
-    ? 'hover:shadow-[0_32px_90px_rgba(236,72,153,0.42)]'
-    : 'hover:shadow-[0_32px_90px_rgba(249,115,22,0.4)]';
-  const buttonBoxShadow = compact
-    ? '0 24px 70px rgba(236,72,153,0.35)'
-    : '0 24px 70px rgba(56,189,248,0.4)';
-
   return (
     <div
       className="w-full overflow-hidden rounded-3xl border border-white/10 p-8 backdrop-blur-2xl transition-all duration-700 ease-out"
-      style={{ backgroundColor: containerBg, boxShadow: containerShadow }}
+      style={{ backgroundColor: palette.containerBg, boxShadow: palette.containerShadow }}
     >
       {!compact && (
         <>
@@ -78,17 +93,17 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
               alt="Welcome to CodeVault"
               className="h-full w-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-br from-[#0b1a2d]/10 via-transparent to-[#f97316]/35" />
+            <div className={`absolute inset-0 bg-gradient-to-br ${palette.imageOverlay}`} />
             <div className="absolute bottom-4 left-4 text-xs font-semibold uppercase tracking-[0.4em] text-white/80">
               Create Account
             </div>
           </div>
 
-          <div className="mt-6 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.35em] text-[#38bdf8]/70">
+          <div className={`mt-6 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.35em] ${palette.headerTextClass}`}>
             <span className="inline-flex items-center gap-2">
               <span
                 className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: accentBullet }}
+                style={{ backgroundColor: palette.accentBullet }}
               />
               Join CodeVault
             </span>
@@ -97,7 +112,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
         </>
       )}
 
-      <form onSubmit={handleSubmit} className={`${compact ? "mt-2" : "mt-6"} space-y-6`}>
+      <form onSubmit={handleSubmit} className={`${compact ? 'mt-2' : 'mt-6'} space-y-6`}>
         {error && (
           <Alert variant="destructive" className="bg-rose-500/10 text-rose-100">
             <AlertDescription>{error}</AlertDescription>
@@ -117,7 +132,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
             minLength={3}
             maxLength={30}
             disabled={isLoading}
-            className="h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 focus:border-[#38bdf8] focus:ring-[#38bdf8]/50"
+            className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
           />
         </div>
         
@@ -132,7 +147,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
             onChange={(e) => setEmail(e.target.value)}
             required
             disabled={isLoading}
-            className="h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 focus:border-[#38bdf8] focus:ring-[#38bdf8]/50"
+            className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
           />
         </div>
         
@@ -146,7 +161,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={isLoading}
-            className="h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 focus:border-[#38bdf8] focus:ring-[#38bdf8]/50"
+            className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
           />
         </div>
 
@@ -158,10 +173,10 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
             value={avatarGender}
             onValueChange={(value) => setAvatarGender(value as 'male' | 'female')}
           >
-            <SelectTrigger id="avatar-gender" className="h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 focus:border-[#38bdf8] focus:ring-[#38bdf8]/50">
+            <SelectTrigger id="avatar-gender" className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 ${palette.focusClass}`}>
               <SelectValue placeholder="Choose your avatar base" />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 text-slate-100">
+            <SelectContent className={`${palette.selectBg} text-slate-100`}>
               <SelectItem value="male">Masculine • Adventurous</SelectItem>
               <SelectItem value="female">Feminine • Elegant</SelectItem>
             </SelectContent>
@@ -183,7 +198,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
             required
             minLength={6}
             disabled={isLoading}
-            className="h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 focus:border-[#38bdf8] focus:ring-[#38bdf8]/50"
+            className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
           />
         </div>
         
@@ -198,15 +213,15 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
             disabled={isLoading}
-            className="h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 focus:border-[#38bdf8] focus:ring-[#38bdf8]/50"
+            className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
           />
         </div>
         
         <Button
           type="submit"
-          className={`h-12 w-full rounded-2xl bg-gradient-to-r ${buttonGradient} text-base font-semibold transition hover:scale-[1.01] ${buttonHoverShadow}`}
+          className={`h-12 w-full rounded-2xl bg-gradient-to-r ${palette.gradient} text-base font-semibold transition hover:scale-[1.01] ${palette.buttonHoverShadow}`}
           disabled={isLoading}
-          style={{ boxShadow: buttonBoxShadow }}
+          style={{ boxShadow: palette.buttonShadow }}
         >
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Create Account
@@ -218,7 +233,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
         <button
           type="button"
           onClick={onSwitchToLogin}
-          className="font-semibold text-[#38bdf8] transition hover:text-[#f97316]"
+          className={`font-semibold transition ${palette.linkClass}`}
           disabled={isLoading}
         >
           Sign in
@@ -227,5 +242,4 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
     </div>
   );
 }
-
 

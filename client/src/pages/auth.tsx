@@ -27,26 +27,58 @@ export default function AuthPage() {
     '--glow-y': `${glowPos.y}%`,
   } as CSSProperties;
 
-  const heroImage = isLogin ? '/codevault%20login%20image.png' : '/codevault%20signup%20image.png';
-  const radialTop = isLogin ? 'rgba(56,189,248,0.18)' : 'rgba(236,72,153,0.22)';
-  const radialBottom = isLogin ? 'rgba(249,115,22,0.18)' : 'rgba(168,85,247,0.25)';
-  const topBlob = isLogin ? '#38bdf8' : '#ec4899';
-  const bottomBlob = isLogin ? '#f97316' : '#8b5cf6';
-  const badgeBg = isLogin ? '#0b172c' : '#2a0f2f';
-  const badgeText = isLogin ? '#fbbf24' : '#f472b6';
-  const formGradientFrom = isLogin ? '#38bdf8' : '#ec4899';
-  const formGradientTo = isLogin ? '#f97316' : '#8b5cf6';
-  const heroCardShade = isLogin ? '#0b172c' : '#1f1030';
-  const heroShadow = isLogin
-    ? '0 30px 120px rgba(249,115,22,0.25)'
-    : '0 30px 120px rgba(236,72,153,0.3)';
-  const cardShadow = isLogin
-    ? '0 60px 150px rgba(56,189,248,0.25)'
-    : '0 60px 150px rgba(236,72,153,0.28)';
+  const theme = isLogin
+    ? {
+        heroImage: '/codevault%20login%20image.png',
+        radialTop: 'rgba(10,147,150,0.22)',
+        radialBottom: 'rgba(148,210,189,0.24)',
+        topBlob: '#005f73',
+        bottomBlob: '#94d2bd',
+        badgeBg: '#003945',
+        badgeText: '#e9d8a6',
+        formGradient: ['#0a9396', '#94d2bd'] as const,
+        heroCardSurface: 'rgba(0, 26, 33, 0.88)',
+        heroShadow: '0 30px 120px rgba(148,210,189,0.32)',
+        heroHoverShadow: '0 80px 160px rgba(148,210,189,0.35)',
+        cardShadow: '0 50px 140px rgba(0,18,25,0.45)',
+        glowPrimary: 'rgba(148,210,189,0.35)',
+        glowSecondary: 'rgba(10,147,150,0.28)',
+        overlayBg: 'rgba(0, 41, 49, 0.88)',
+        overlayBorder: 'rgba(148,210,189,0.35)',
+        overlayShadow: '0 24px 60px rgba(148,210,189,0.25)',
+        overlayAccent: '#94d2bd',
+      }
+    : {
+        heroImage: '/codevault%20signup%20image.png',
+        radialTop: 'rgba(238,155,0,0.26)',
+        radialBottom: 'rgba(155,34,38,0.30)',
+        topBlob: '#ee9b00',
+        bottomBlob: '#bb3e03',
+        badgeBg: '#3b1411',
+        badgeText: '#e9d8a6',
+        formGradient: ['#ee9b00', '#ca6702'] as const,
+        heroCardSurface: 'rgba(58, 12, 8, 0.92)',
+        heroShadow: '0 30px 120px rgba(238,155,0,0.35)',
+        heroHoverShadow: '0 80px 160px rgba(238,155,0,0.32)',
+        cardShadow: '0 50px 140px rgba(155,34,38,0.45)',
+        glowPrimary: 'rgba(238,155,0,0.35)',
+        glowSecondary: 'rgba(171,32,18,0.30)',
+        overlayBg: 'rgba(59, 12, 8, 0.9)',
+        overlayBorder: 'rgba(238,155,0,0.35)',
+        overlayShadow: '0 24px 60px rgba(238,155,0,0.28)',
+        overlayAccent: '#ee9b00',
+      };
   const heroCardStyle: CSSProperties = {
     ...heroGlowStyle,
-    backgroundColor: `${heroCardShade}bf`,
-    boxShadow: cardShadow,
+    backgroundColor: theme.heroCardSurface,
+    boxShadow: theme.cardShadow,
+  };
+  const heroCardVariables: Record<string, string> = {
+    '--hero-primary': theme.formGradient[0],
+    '--hero-secondary': theme.formGradient[1],
+    '--hero-glow-primary': theme.glowPrimary,
+    '--hero-glow-secondary': theme.glowSecondary,
+    '--hero-hover-shadow': theme.heroHoverShadow,
   };
 
   return (
@@ -54,16 +86,16 @@ export default function AuthPage() {
       <div
         className="pointer-events-none absolute inset-0 transition-all duration-700 ease-out"
         style={{
-          background: `radial-gradient(circle at top, ${radialTop}, transparent 45%), radial-gradient(circle at bottom, ${radialBottom}, transparent 42%)`,
+          background: `radial-gradient(circle at top, ${theme.radialTop}, transparent 45%), radial-gradient(circle at bottom, ${theme.radialBottom}, transparent 42%)`,
         }}
       />
       <div
         className="pointer-events-none absolute -top-[25%] right-[-6%] h-[60vh] w-[60vh] rounded-full blur-3xl transition-all duration-700 ease-out"
-        style={{ backgroundColor: topBlob, opacity: 0.25 }}
+        style={{ backgroundColor: theme.topBlob, opacity: 0.25 }}
       />
       <div
         className="pointer-events-none absolute -bottom-[25%] left-[-12%] h-[70vh] w-[70vh] rounded-full blur-3xl transition-all duration-700 ease-out"
-        style={{ backgroundColor: bottomBlob, opacity: 0.22 }}
+        style={{ backgroundColor: theme.bottomBlob, opacity: 0.22 }}
       />
 
       <div className="relative z-10 flex h-full flex-col lg:flex-row">
@@ -78,7 +110,7 @@ export default function AuthPage() {
             <div className="space-y-4">
               <span
                 className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.45em] sm:text-sm transition-colors duration-700"
-                style={{ backgroundColor: `${badgeBg}b3`, color: badgeText }}
+                style={{ backgroundColor: `${theme.badgeBg}cc`, color: theme.badgeText, borderColor: `${theme.badgeText}33` }}
               >
                 Build for CODERS
               </span>
@@ -95,7 +127,7 @@ export default function AuthPage() {
             <div
               className="absolute -inset-4 rounded-[32px] bg-gradient-to-r blur-2xl transition-all duration-700"
               style={{
-                backgroundImage: `linear-gradient(to right, ${formGradientFrom}59, transparent, ${formGradientTo}59)`,
+                backgroundImage: `linear-gradient(to right, ${`${theme.formGradient[0]}59`}, transparent, ${`${theme.formGradient[1]}59`})`,
               }}
             />
             <div className="relative">
@@ -116,10 +148,10 @@ export default function AuthPage() {
         </div>
 
         <div className="relative hidden flex-1 items-center justify-center overflow-hidden lg:flex">
-      <div
-        className="pointer-events-none absolute inset-0 transition-all duration-700 ease-out"
+          <div
+            className="pointer-events-none absolute inset-0 transition-all duration-700 ease-out"
             style={{
-              background: `linear-gradient(135deg, ${topBlob}33, transparent, ${bottomBlob}2e)`,
+              background: `linear-gradient(135deg, ${theme.topBlob}2e, transparent, ${theme.bottomBlob}2b)`,
             }}
           />
           <div className="relative flex h-full w-full items-center justify-center p-8">
@@ -127,20 +159,20 @@ export default function AuthPage() {
               <div
                 className="absolute inset-0 translate-y-16 scale-110 rounded-[40px] blur-3xl transition-all duration-700 ease-out"
                 style={{
-                  background: `linear-gradient(135deg, ${formGradientFrom}40, #0d1b3240 45%, ${formGradientTo}35)`,
+                  background: `linear-gradient(135deg, ${theme.formGradient[0]}3a, rgba(0,18,25,0.55) 45%, ${theme.formGradient[1]}33)`,
                 }}
               />
               <div
                 className="interactive-hero-card relative overflow-hidden rounded-[36px] border border-white/10 p-8 backdrop-blur-3xl transition-all duration-700 ease-out"
                 onMouseMove={handleHeroPointer}
                 onMouseLeave={handleHeroLeave}
-                style={heroCardStyle}
+                style={{ ...heroCardStyle, ...heroCardVariables } as CSSProperties}
               >
                 <img
-                  src={heroImage}
+                  src={theme.heroImage}
                   alt="CodeVault premium workspace"
                   className="relative z-10 w-full rounded-[28px] object-cover transition-shadow duration-700 ease-out"
-                  style={{ boxShadow: heroShadow }}
+                  style={{ boxShadow: theme.heroShadow }}
                 />
               </div>
             </div>
