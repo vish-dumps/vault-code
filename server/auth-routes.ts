@@ -165,7 +165,6 @@ router.post('/login', async (req: Request, res: Response) => {
       otpRequired: true,
       otpSession,
       expiresIn: OTP_EXPIRY_MS,
-      ...(IS_PRODUCTION ? {} : { debugOtp: otpCode }),
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

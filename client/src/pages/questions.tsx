@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Search, Plus } from "lucide-react";
 import type { QuestionWithDetails } from "@shared/schema";
+import { tagsMatchQuery } from "@/lib/tagTaxonomy";
 
 export default function Questions() {
   const [, setLocation] = useLocation();
@@ -62,13 +63,19 @@ export default function Questions() {
   // Get all unique tags from questions
   const allTags = Array.from(new Set(sortedQuestions.flatMap((q) => q.tags || [])));
 
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const normalizedTagFilter = tagFilter.trim();
+
   const filteredQuestions = sortedQuestions.filter((q) => {
-    const matchesSearch = q.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch =
+      !normalizedSearch ||
+      q.title.toLowerCase().includes(normalizedSearch) ||
+      tagsMatchQuery(q.tags, normalizedSearch);
     const matchesDifficulty =
       difficultyFilter === "all" || q.difficulty === difficultyFilter;
-    const matchesTag = !tagFilter || q.tags?.some(tag => 
-      tag.toLowerCase().includes(tagFilter.toLowerCase())
-    );
+    const matchesTag =
+      !normalizedTagFilter || tagsMatchQuery(q.tags, normalizedTagFilter);
+
     return matchesSearch && matchesDifficulty && matchesTag;
   });
 

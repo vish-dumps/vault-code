@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 interface RegisterFormProps {
   onSuccess?: () => void;
@@ -50,6 +50,8 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
   const [avatarGender, setAvatarGender] = useState<'male' | 'female'>('male');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { register } = useAuth();
 
   const palette = compact ? WARM_PALETTE : COOL_PALETTE;
@@ -190,31 +192,53 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
           <Label htmlFor="password" className="text-slate-200">
             Password
           </Label>
-          <Input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-            disabled={isLoading}
-            className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
-          />
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+              disabled={isLoading}
+              className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 pr-12 ${palette.focusClass}`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              disabled={isLoading}
+              className="absolute inset-y-0 right-4 flex items-center text-slate-400 transition hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-600"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
         
         <div className="space-y-2">
           <Label htmlFor="confirmPassword" className="text-slate-200">
             Confirm Password
           </Label>
-          <Input
-            id="confirmPassword"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-            disabled={isLoading}
-            className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
-          />
+          <div className="relative">
+            <Input
+              id="confirmPassword"
+              type={showConfirmPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              disabled={isLoading}
+              className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 pr-12 ${palette.focusClass}`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword((prev) => !prev)}
+              disabled={isLoading}
+              className="absolute inset-y-0 right-4 flex items-center text-slate-400 transition hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-600"
+              aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+            >
+              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
         
         <Button
@@ -242,4 +266,3 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
     </div>
   );
 }
-

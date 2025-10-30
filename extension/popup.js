@@ -418,9 +418,6 @@ async function attemptLogin(email, password) {
     state.otpSession = data.otpSession;
     elements.otpContainer.classList.remove("hidden");
     elements.loginOtp.focus();
-    if (data.debugOtp) {
-      console.debug("CodeVault OTP (dev):", data.debugOtp);
-    }
     updateLoginButton("Verify Code");
     showBanner("Enter the verification code sent to your email.", "success");
     return;

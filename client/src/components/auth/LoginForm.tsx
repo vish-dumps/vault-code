@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth, type LoginResult } from '@/contexts/AuthContext';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
-import { ArrowLeft, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react';
 
 interface LoginFormProps {
   onSuccess?: () => void;
@@ -20,10 +20,10 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [stage, setStage] = useState<'credentials' | 'otp'>('credentials');
+  const [showPassword, setShowPassword] = useState(false);
   const [otpSession, setOtpSession] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [countdown, setCountdown] = useState<string | null>(null);
-  const [debugOtp, setDebugOtp] = useState<string | null>(null);
   const { login, verifyOtp } = useAuth();
 
   useEffect(() => {
@@ -58,7 +58,6 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
       setOtpSession(result.otpSession);
       setOtpValue('');
       setExpiresAt(Date.now() + result.expiresIn);
-      setDebugOtp(result.debugOtp ?? null);
     } else {
       onSuccess?.();
     }
@@ -122,7 +121,6 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
     setOtpSession(null);
     setOtpValue('');
     setExpiresAt(null);
-    setDebugOtp(null);
   };
 
   return (
@@ -163,15 +161,26 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
               <Label htmlFor="password" className="text-slate-300">
                 Password
               </Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={isLoading || isResending}
-                className="h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 focus:border-[#0a9396] focus:ring-[#0a9396]/50"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={isLoading || isResending}
+                  className="h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 pr-12 focus:border-[#0a9396] focus:ring-[#0a9396]/50"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  disabled={isLoading || isResending}
+                  className="absolute inset-y-0 right-4 flex items-center text-slate-400 transition hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-600"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <Button
@@ -226,12 +235,6 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
                 Enter the 6-digit code sent to <span className="text-slate-200">{email}</span>
               </p>
             </div>
-
-            {debugOtp && import.meta.env.DEV && (
-              <div className="rounded-xl border border-dashed border-[#0a9396]/40 bg-[#0a9396]/10 p-3 text-center text-xs text-[#94d2bd]">
-                Dev mode preview: <span className="font-semibold tracking-[0.4em]">{debugOtp}</span>
-              </div>
-            )}
 
             <Button
               type="submit"

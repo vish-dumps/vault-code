@@ -1,9 +1,11 @@
+import { useEffect, useMemo, useState } from "react";
 import { Bell, CheckCircle, Trophy, Flame, Calendar } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import type { QuestionWithDetails } from "@shared/schema";
 
 interface Notification {
@@ -12,106 +14,159 @@ interface Notification {
   title: string;
   message: string;
   time: string;
-  read: boolean;
+  read?: boolean;
+  questionId?: string | number;
 }
 
 export function NotificationPopover() {
+  const [, setLocation] = useLocation();
+  const [open, setOpen] = useState(false);
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+
   const { data: userProfile } = useQuery<any>({ queryKey: ["/api/user/profile"] });
   const { data: todos = [] } = useQuery<any[]>({ queryKey: ["/api/todos"] });
   const { data: contests = [] } = useQuery<any[]>({ queryKey: ["/api/contests"] });
   const { data: questions = [] } = useQuery<QuestionWithDetails[]>({ queryKey: ["/api/questions"] });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const now = new Date();
+  const notifications = useMemo<Notification[]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const now = new Date();
 
-  const toTimestamp = (value: QuestionWithDetails["dateSaved"]) => {
-    if (!value) return 0;
-    const date = value instanceof Date ? value : new Date(value);
-    const time = date.getTime();
-    return Number.isNaN(time) ? 0 : time;
-  };
+    const toTimestamp = (value: QuestionWithDetails["dateSaved"]) => {
+      if (!value) return 0;
+      const date = value instanceof Date ? value : new Date(value);
+      const time = date.getTime();
+      return Number.isNaN(time) ? 0 : time;
+    };
 
-  const sortedQuestions = [...questions].sort(
-    (a, b) => toTimestamp(b.dateSaved) - toTimestamp(a.dateSaved)
-  );
+    const sortedQuestions = [...questions].sort(
+      (a, b) => toTimestamp(b.dateSaved) - toTimestamp(a.dateSaved)
+    );
 
-  const questionsToday = sortedQuestions.filter((q) => {
-    const ds = q.dateSaved ? new Date(q.dateSaved as unknown as string) : null;
-    if (!ds) return false;
-    const dm = new Date(ds.getFullYear(), ds.getMonth(), ds.getDate());
-    return dm.getTime() === today.getTime();
-  }).length;
+    const questionsToday = sortedQuestions.filter((q) => {
+      const ds = q.dateSaved ? new Date(q.dateSaved as unknown as string) : null;
+      if (!ds) return false;
+      const dm = new Date(ds.getFullYear(), ds.getMonth(), ds.getDate());
+      return dm.getTime() === today.getTime();
+    }).length;
 
-  const pendingTodos = todos.filter((t: any) => !t.completed).length;
-  const currentStreak = userProfile?.streak ?? 0;
-  const streakGoal = userProfile?.streakGoal ?? 7;
+    const pendingTodos = todos.filter((t: any) => !t.completed).length;
+    const currentStreak = userProfile?.streak ?? 0;
+    const streakGoal = userProfile?.streakGoal ?? 7;
 
-  const notifications: Notification[] = [];
-  const latestQuestion = sortedQuestions[0];
-  if (latestQuestion?.dateSaved) {
-    const latestDate = new Date(latestQuestion.dateSaved as unknown as string);
-    const diffMs = now.getTime() - latestDate.getTime();
-    if (!Number.isNaN(diffMs) && diffMs >= 0 && diffMs <= 1000 * 60 * 60) {
-      const relative =
-        diffMs < 1000 * 60
-          ? "Just now"
-          : diffMs < 1000 * 60 * 60
-            ? `${Math.round(diffMs / (1000 * 60))} min ago`
-            : latestDate.toLocaleTimeString();
-      notifications.push({
-        id: `question_${latestQuestion.id}`,
+    const list: Notification[] = [];
+
+    const latestQuestion = sortedQuestions[0];
+    if (latestQuestion?.dateSaved) {
+      const latestDate = new Date(latestQuestion.dateSaved as unknown as string);
+      const diffMs = now.getTime() - latestDate.getTime();
+      if (!Number.isNaN(diffMs) && diffMs >= 0 && diffMs <= 1000 * 60 * 60) {
+        const relative =
+          diffMs < 1000 * 60
+            ? "Just now"
+            : diffMs < 1000 * 60 * 60
+              ? `${Math.round(diffMs / (1000 * 60))} min ago`
+              : latestDate.toLocaleTimeString();
+        list.push({
+          id: `question_${latestQuestion.id}`,
+          type: "achievement",
+          title: "New question saved",
+          message: latestQuestion.title,
+          time: relative,
+          questionId: latestQuestion.id,
+        });
+      }
+    }
+
+    if (questionsToday > 0) {
+      list.push({
+        id: "q_today",
         type: "achievement",
-        title: "New question saved",
-        message: latestQuestion.title,
-        time: relative,
-        read: false,
+        title: "Nice work today",
+        message: `${questionsToday} problem${questionsToday === 1 ? "" : "s"} added today`,
+        time: "Today",
       });
     }
-  }
 
-  if (questionsToday > 0) {
-    notifications.push({
-      id: "q_today",
-      type: "achievement",
-      title: "Nice work today",
-      message: `${questionsToday} problem${questionsToday === 1 ? '' : 's'} added today`,
-      time: "Just now",
-      read: false,
-    });
-  }
-  if (currentStreak > 0) {
-    notifications.push({
-      id: "streak_current",
-      type: "streak",
-      title: "Streak running",
-      message: `You're on a ${currentStreak}-day streak (goal ${streakGoal})`,
-      time: "Today",
-      read: false,
-    });
-  }
-  if (pendingTodos > 0) {
-    notifications.push({
-      id: "todos_pending",
-      type: "reminder",
-      title: "Tasks pending",
-      message: `${pendingTodos} to-do item${pendingTodos === 1 ? '' : 's'} remaining`,
-      time: "Today",
-      read: false,
-    });
-  }
-  if (contests.length > 0) {
-    notifications.push({
-      id: "contest_upcoming",
-      type: "contest",
-      title: "Upcoming contest",
-      message: `${contests[0].name} on ${contests[0].platform}`,
-      time: contests[0].startTime || "Soon",
-      read: true,
-    });
-  }
+    if (currentStreak > 0) {
+      list.push({
+        id: "streak_current",
+        type: "streak",
+        title: "Streak running",
+        message: `You're on a ${currentStreak}-day streak (goal ${streakGoal})`,
+        time: "Today",
+      });
+    }
 
-  const unreadCount = notifications.length;
+    if (pendingTodos > 0) {
+      list.push({
+        id: "todos_pending",
+        type: "reminder",
+        title: "Tasks pending",
+        message: `${pendingTodos} to-do item${pendingTodos === 1 ? "" : "s"} remaining`,
+        time: "Today",
+      });
+    }
+
+    if (contests.length > 0) {
+      list.push({
+        id: "contest_upcoming",
+        type: "contest",
+        title: "Upcoming contest",
+        message: `${contests[0].name} on ${contests[0].platform}`,
+        time: contests[0].startTime || "Soon",
+        read: true,
+      });
+    }
+
+    return list;
+  }, [questions, todos, userProfile, contests]);
+
+  useEffect(() => {
+    setReadIds((prev) => {
+      const validIds = new Set(notifications.map((n) => n.id));
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (validIds.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      });
+      if (!changed && next.size === prev.size) {
+        return prev;
+      }
+      return next;
+    });
+  }, [notifications]);
+
+  const markNotificationAsRead = (id: string) => {
+    setReadIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    markNotificationAsRead(notification.id);
+    if (notification.questionId) {
+      setOpen(false);
+      setLocation(`/questions/${notification.questionId}`);
+    }
+  };
+
+  const handleMarkAllRead = () => {
+    setReadIds(new Set(notifications.map((notification) => notification.id)));
+  };
+
+  const unreadCount = notifications.reduce((count, notification) => {
+    const isRead = notification.read || readIds.has(notification.id);
+    return isRead ? count : count + 1;
+  }, 0);
 
   const getIcon = (type: Notification["type"]) => {
     switch (type) {
@@ -127,7 +182,7 @@ export function NotificationPopover() {
   };
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
@@ -165,6 +220,15 @@ export function NotificationPopover() {
                 {unreadCount > 0 ? `${unreadCount} unread` : "All caught up!"}
               </p>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+              onClick={handleMarkAllRead}
+              disabled={unreadCount === 0}
+            >
+              Mark all as read
+            </Button>
           </div>
 
           {/* Notifications List */}
@@ -176,40 +240,44 @@ export function NotificationPopover() {
               </div>
             ) : (
               <div className="p-2">
-                {notifications.map((notification, index) => (
-                  <motion.div
-                    key={notification.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    whileHover={{ scale: 1.02, x: 4 }}
-                    className={
-                      `p-3 rounded-lg mb-2 cursor-pointer transition-all duration-200 ` +
-                      (notification.read
-                        ? 'bg-secondary/30 hover:bg-secondary/50'
-                        : 'bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/30 border border-blue-200/50 dark:border-blue-800/30')
-                    }
-                  >
-                    <div className="flex gap-3">
-                      <div className="flex-shrink-0 mt-0.5">
-                        {getIcon(notification.type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <h4 className="font-semibold text-sm truncate">
-                            {notification.title}
-                          </h4>
+                {notifications.map((notification, index) => {
+                  const isRead = notification.read || readIds.has(notification.id);
+                  return (
+                    <motion.div
+                      key={notification.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      whileHover={{ scale: 1.02, x: 4 }}
+                      className={
+                        `p-3 rounded-lg mb-2 cursor-pointer transition-all duration-200 ` +
+                        (isRead
+                          ? "bg-secondary/30 hover:bg-secondary/50"
+                          : "bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/30 border border-blue-200/50 dark:border-blue-800/30")
+                      }
+                      onClick={() => handleNotificationClick(notification)}
+                    >
+                      <div className="flex gap-3">
+                        <div className="flex-shrink-0 mt-0.5">
+                          {getIcon(notification.type)}
                         </div>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          {notification.message}
-                        </p>
-                        <span className="text-[10px] text-muted-foreground">
-                          {notification.time}
-                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <h4 className="font-semibold text-sm truncate">
+                              {notification.title}
+                            </h4>
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            {notification.message}
+                          </p>
+                          <span className="text-[10px] text-muted-foreground">
+                            {notification.time}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  );
+                })}
               </div>
             )}
           </ScrollArea>

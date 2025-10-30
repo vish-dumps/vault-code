@@ -26,7 +26,6 @@ type LoginResult =
       status: "otp_required";
       otpSession: string;
       expiresIn: number;
-      debugOtp?: string;
     }
   | {
       status: "authenticated";
@@ -146,7 +145,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           status: 'otp_required',
           otpSession: data.otpSession,
           expiresIn: data.expiresIn,
-          debugOtp: data.debugOtp,
         };
       }
 
