@@ -12,6 +12,56 @@ import { z } from "zod";
 import { authenticateToken, getUserId, AuthRequest } from "./auth";
 import { Todo } from "./models/Todo";
 
+interface ContestResponse {
+  id: string;
+  name: string;
+  platform: string;
+  startTime: string;
+  url: string;
+}
+
+const CONTEST_CACHE_TTL = 1000 * 60 * 10;
+let cachedContests: ContestResponse[] = [];
+let contestsCacheTimestamp = 0;
+
+const FALLBACK_CONTESTS: ContestResponse[] = [
+  {
+    id: "fallback-1",
+    name: "Codeforces Round #912 (Div. 2)",
+    platform: "Codeforces",
+    startTime: "Oct 25, 2025 at 8:35 PM",
+    url: "https://codeforces.com",
+  },
+  {
+    id: "fallback-2",
+    name: "Weekly Contest 419",
+    platform: "LeetCode",
+    startTime: "Oct 27, 2025 at 10:00 AM",
+    url: "https://leetcode.com",
+  },
+  {
+    id: "fallback-3",
+    name: "CodeChef Starters 110",
+    platform: "CodeChef",
+    startTime: "Oct 28, 2025 at 8:00 PM",
+    url: "https://codechef.com",
+  },
+  {
+    id: "fallback-4",
+    name: "AtCoder Beginner Contest 325",
+    platform: "AtCoder",
+    startTime: "Oct 29, 2025 at 9:00 AM",
+    url: "https://atcoder.jp",
+  },
+  {
+    id: "fallback-5",
+    name: "Codeforces Round #913 (Div. 1)",
+    platform: "Codeforces",
+    startTime: "Oct 30, 2025 at 7:00 PM",
+    url: "https://codeforces.com",
+  },
+];
+
 // Helper function to update streak on activity
 async function updateStreakOnActivity(userId: string): Promise<void> {
   const user = await mongoStorage.getUser(userId);
@@ -210,30 +260,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Contest API (mock data for now)
-  app.get("/api/contests", async (req, res) => {
+  // Contest API
+  app.get("/api/contests", async (_req, res) => {
     try {
-      // TODO: Fetch from external APIs (Codeforces, Kontests)
-      const mockContests = [
-        {
-          id: "1",
-          name: "Codeforces Round #912 (Div. 2)",
-          platform: "Codeforces",
-          startTime: "Oct 25, 2025 at 8:35 PM",
-          url: "https://codeforces.com",
-        },
-        {
-          id: "2",
-          name: "Weekly Contest 419",
-          platform: "LeetCode",
-          startTime: "Oct 27, 2025 at 10:00 AM",
-          url: "https://leetcode.com",
-        },
-      ];
-      res.json(mockContests);
+      const now = Date.now();
+      if (cachedContests.length && now - contestsCacheTimestamp < CONTEST_CACHE_TTL) {
+        return res.json(cachedContests);
+      }
+
+      const upstreamResponse = await fetch("https://kontests.net/api/v1/all");
+      if (!upstreamResponse.ok) {
+        throw new Error(`Upstream contests API returned ${upstreamResponse.status}`);
+      }
+
+      const upstreamData = await upstreamResponse.json();
+      if (!Array.isArray(upstreamData)) {
+        throw new Error("Unexpected contests payload");
+      }
+
+      const upcoming = upstreamData
+        .map((contest: any, index: number) => {
+          const rawDate =
+            contest.start_time ||
+            contest.startTime ||
+            contest.start_time_utc ||
+            contest.startTimeUTC ||
+            (typeof contest.startTimeSeconds === "number" ? new Date(contest.startTimeSeconds * 1000).toISOString() : null);
+
+          const startDate = rawDate ? new Date(rawDate) : null;
+          if (!startDate || Number.isNaN(startDate.getTime())) {
+            return null;
+          }
+
+          const startTime = startDate.toLocaleString(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          });
+
+          const platform = contest.site || contest.platform || "Contest";
+          const name = contest.name || `${platform} Contest`;
+
+          return {
+            id: contest.id || `${platform}-${startDate.getTime()}-${index}`,
+            name,
+            platform,
+            startTime,
+            url: contest.url || contest.link || `https://www.google.com/search?q=${encodeURIComponent(name)}`,
+            startDate,
+          };
+        })
+        .filter((contest): contest is (ContestResponse & { startDate: Date }) => contest !== null)
+        .filter((contest) => contest.startDate.getTime() >= now - 30 * 60 * 1000)
+        .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
+        .slice(0, 15)
+        .map(({ startDate: _startDate, ...rest }) => rest);
+
+      if (!upcoming.length && cachedContests.length) {
+        return res.json(cachedContests);
+      }
+
+      cachedContests = upcoming.length ? upcoming : FALLBACK_CONTESTS;
+      contestsCacheTimestamp = Date.now();
+
+      res.json(cachedContests);
     } catch (error) {
       console.error("Error fetching contests:", error);
-      res.status(500).json({ error: "Failed to fetch contests" });
+      if (cachedContests.length) {
+        return res.json(cachedContests);
+      }
+      res.json(FALLBACK_CONTESTS);
     }
   });
 

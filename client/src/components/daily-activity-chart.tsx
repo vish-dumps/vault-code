@@ -7,11 +7,11 @@ interface DailyActivityChartProps {
 
 export function DailyActivityChart({ data }: DailyActivityChartProps) {
   return (
-    <Card>
+    <Card className="w-full">
       <CardHeader>
         <CardTitle className="text-lg">Daily Activity</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="w-full min-w-0">
         <ResponsiveContainer width="100%" height={250}>
           <AreaChart data={data}>
             <defs>

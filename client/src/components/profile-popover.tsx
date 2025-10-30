@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { User, Settings, LogOut, Trophy, Code2, Target, Sparkles } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { apiRequest } from "@/lib/queryClient";
 export function ProfilePopover() {
   const { user, logout } = useAuth();
   const [, setLocation] = useLocation();
+  const [open, setOpen] = useState(false);
 
   const { data: userProfile } = useQuery({
     queryKey: ["/api/user/profile"],
@@ -23,7 +25,13 @@ export function ProfilePopover() {
 
   const handleLogout = async () => {
     await logout();
+    setOpen(false);
     setLocation("/auth");
+  };
+
+  const handleNavigate = (path: string) => {
+    setOpen(false);
+    setLocation(path);
   };
 
   const stats = [
@@ -45,7 +53,7 @@ export function ProfilePopover() {
   ];
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
@@ -118,7 +126,7 @@ export function ProfilePopover() {
             <Button
               variant="ghost"
               className="w-full justify-start gap-2 hover:bg-purple-500/10"
-              onClick={() => setLocation("/profile")}
+              onClick={() => handleNavigate("/profile")}
             >
               <User className="h-4 w-4" />
               View Profile
@@ -126,7 +134,7 @@ export function ProfilePopover() {
             <Button
               variant="ghost"
               className="w-full justify-start gap-2 hover:bg-amber-500/10"
-              onClick={() => setLocation("/guide")}
+              onClick={() => handleNavigate("/guide")}
             >
               <Sparkles className="h-4 w-4" />
               Usage Playbook
@@ -134,7 +142,7 @@ export function ProfilePopover() {
             <Button
               variant="ghost"
               className="w-full justify-start gap-2 hover:bg-blue-500/10"
-              onClick={() => setLocation("/profile")}
+              onClick={() => handleNavigate("/profile")}
             >
               <Settings className="h-4 w-4" />
               Settings

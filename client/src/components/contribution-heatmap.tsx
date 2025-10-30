@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface ContributionHeatmapProps {
   data?: Array<{ date: string; count: number }>;
@@ -12,6 +12,10 @@ interface HeatmapDay {
 }
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const CELL_SIZE = 12;
+const CELL_GAP = 2;
+const LABEL_WIDTH = 32;
+const MONTH_LABEL_HEIGHT = 16;
 
 const normalizeDate = (value: string | Date): string => {
   const date = value instanceof Date ? value : new Date(value);
@@ -22,7 +26,12 @@ const normalizeDate = (value: string | Date): string => {
 };
 
 const formatTooltip = (date: Date, count: number) => {
-  return `${date.toLocaleDateString()}: ${count >= 0 ? count : 0} problems`;
+  const base = date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+  return `${base}: ${Math.max(count, 0)} problem${Math.max(count, 0) === 1 ? "" : "s"}`;
 };
 
 export function ContributionHeatmap({ data = [] }: ContributionHeatmapProps) {
@@ -36,13 +45,11 @@ export function ContributionHeatmap({ data = [] }: ContributionHeatmapProps) {
       contributions.set(key, (contributions.get(key) || 0) + count);
     });
 
-    // Generate 53 weeks to keep a rolling year view similar to GitHub
     const totalWeeks = 53;
     const startDate = new Date(today);
     startDate.setDate(startDate.getDate() - totalWeeks * 7);
     startDate.setHours(0, 0, 0, 0);
 
-    // Align start date to the previous Sunday
     const startOffset = startDate.getDay();
     startDate.setDate(startDate.getDate() - startOffset);
 
@@ -94,20 +101,40 @@ export function ContributionHeatmap({ data = [] }: ContributionHeatmapProps) {
     };
   }, [data]);
 
+  const heatmapWidth = weeks.length * (CELL_SIZE + CELL_GAP) - CELL_GAP + LABEL_WIDTH;
+  const heatmapHeight = 7 * (CELL_SIZE + CELL_GAP) - CELL_GAP + MONTH_LABEL_HEIGHT;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const updateScale = () => {
+      if (!containerRef.current) return;
+      const availableWidth = containerRef.current.clientWidth;
+      if (!availableWidth) return;
+      const requiredWidth = heatmapWidth;
+      const nextScale = requiredWidth > availableWidth ? availableWidth / requiredWidth : 1;
+      setScale(Math.max(Math.min(nextScale, 1), 0.5));
+    };
+
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
+  }, [heatmapWidth]);
+
   const getColor = (count: number) => {
-    if (count === -1) return "bg-transparent";
-    if (count === 0) return "bg-muted/30";
-    if (count === 1) return "bg-green-200 dark:bg-green-900/40";
-    if (count === 2) return "bg-green-300 dark:bg-green-800/60";
-    if (count === 3) return "bg-green-400 dark:bg-green-700/80";
-    return "bg-green-500 dark:bg-green-600";
+    if (count === -1) return "bg-transparent border border-dashed border-border/40";
+    if (count === 0) return "bg-slate-300/60 dark:bg-slate-700/60";
+    if (count === 1) return "bg-emerald-200 dark:bg-emerald-900/60";
+    if (count === 2) return "bg-emerald-300 dark:bg-emerald-800/70";
+    if (count === 3) return "bg-emerald-400 dark:bg-emerald-700/80";
+    return "bg-emerald-500 dark:bg-emerald-600";
   };
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-green-500" />
+          <Calendar className="h-5 w-5 text-emerald-500" />
           Activity Heatmap
         </CardTitle>
         <p className="text-sm text-muted-foreground">
@@ -120,61 +147,82 @@ export function ContributionHeatmap({ data = [] }: ContributionHeatmapProps) {
             No activity data available yet.
           </div>
         ) : (
-          <div className="space-y-2">
-            <div className="flex gap-[2px] pl-6">
-              {monthPositions.map(({ label, weekIndex }) => (
+          <div className="space-y-3">
+            <div
+              ref={containerRef}
+              className="relative max-w-full min-w-0 overflow-hidden rounded-2xl border border-border/40 bg-muted/10 p-4"
+            >
+              <div
+                style={{ height: heatmapHeight * scale, width: heatmapWidth * scale }}
+                className="relative"
+              >
                 <div
-                  key={`${label}-${weekIndex}`}
-                  className="text-xs text-muted-foreground"
-                  style={{ marginLeft: weekIndex === 0 ? 0 : weekIndex * 10 }}
+                  style={{
+                    transform: `scale(${scale})`,
+                    transformOrigin: "top left",
+                    width: heatmapWidth,
+                  }}
+                  className="flex flex-col gap-2"
                 >
-                  {label}
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-[2px]">
-              <div className="flex flex-col gap-[2px] justify-around text-xs text-muted-foreground pr-1">
-                <div>Mon</div>
-                <div></div>
-                <div>Wed</div>
-                <div></div>
-                <div>Fri</div>
-                <div></div>
-                <div></div>
-              </div>
-
-              <div className="flex gap-[2px] flex-1 overflow-x-auto pb-1">
-                {weeks.map((week, weekIndex) => (
-                  <div key={weekIndex} className="flex flex-col gap-[2px]">
-                    {week.map((day, dayIndex) => (
+                  <div
+                    className="flex gap-[2px]"
+                    style={{ paddingLeft: LABEL_WIDTH }}
+                  >
+                    {monthPositions.map(({ label, weekIndex }) => (
                       <div
-                        key={dayIndex}
-                        className={`h-3 w-3 rounded-sm ${getColor(day.count)} ${
-                          day.count >= 0 ? "hover:ring-2 hover:ring-green-500 cursor-pointer transition-all" : "cursor-default"
-                        }`}
-                        title={formatTooltip(day.date, day.count)}
-                      />
+                        key={`${label}-${weekIndex}`}
+                        className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground"
+                        style={{ marginLeft: weekIndex === 0 ? 0 : weekIndex * (CELL_SIZE + CELL_GAP) }}
+                      >
+                        {label}
+                      </div>
                     ))}
                   </div>
-                ))}
+
+                  <div className="flex gap-[2px]">
+                    <div
+                      className="flex flex-col justify-between pr-2 text-[10px] text-muted-foreground"
+                      style={{ width: LABEL_WIDTH }}
+                    >
+                      <span>Mon</span>
+                      <span>Wed</span>
+                      <span>Fri</span>
+                    </div>
+                    <div className="flex gap-[2px]">
+                      {weeks.map((week, weekIndex) => (
+                        <div key={weekIndex} className="flex flex-col gap-[2px]">
+                          {week.map((day, dayIndex) => (
+                            <div
+                              key={`${weekIndex}-${dayIndex}`}
+                              style={{ width: CELL_SIZE, height: CELL_SIZE }}
+                              className={`rounded-[3px] transition-all duration-150 ${getColor(day.count)} ${
+                                day.count > 0 ? "shadow-sm" : ""
+                              } ${day.count >= 0 ? "hover:scale-105 cursor-pointer" : "cursor-default opacity-40"}`}
+                              title={day.count >= 0 ? formatTooltip(day.date, day.count) : undefined}
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
             {!hasActivity && (
-              <div className="text-xs text-muted-foreground pt-2">
+              <div className="text-xs text-muted-foreground">
                 No recorded problem activity yet. Add questions to start building your streak.
               </div>
             )}
 
-            <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>Less</span>
               <div className="flex gap-1">
-                <div className="w-3 h-3 rounded-sm bg-muted/30" />
-                <div className="w-3 h-3 rounded-sm bg-green-200 dark:bg-green-900/40" />
-                <div className="w-3 h-3 rounded-sm bg-green-300 dark:bg-green-800/60" />
-                <div className="w-3 h-3 rounded-sm bg-green-400 dark:bg-green-700/80" />
-                <div className="w-3 h-3 rounded-sm bg-green-500 dark:bg-green-600" />
+                <div className="w-3 h-3 rounded-sm bg-slate-300/60 dark:bg-slate-700/60" />
+                <div className="w-3 h-3 rounded-sm bg-emerald-200 dark:bg-emerald-900/60" />
+                <div className="w-3 h-3 rounded-sm bg-emerald-300 dark:bg-emerald-800/70" />
+                <div className="w-3 h-3 rounded-sm bg-emerald-400 dark:bg-emerald-700/80" />
+                <div className="w-3 h-3 rounded-sm bg-emerald-500 dark:bg-emerald-600" />
               </div>
               <span>More</span>
             </div>

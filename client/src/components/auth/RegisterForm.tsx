@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAuth } from '@/contexts/AuthContext';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
+import { useAuth, type LoginResult } from '@/contexts/AuthContext';
+import { ArrowLeft, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react';
 
 interface RegisterFormProps {
   onSuccess?: () => void;
@@ -49,15 +50,64 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
   const [name, setName] = useState('');
   const [avatarGender, setAvatarGender] = useState<'male' | 'female'>('male');
   const [error, setError] = useState('');
+  const [stage, setStage] = useState<'credentials' | 'otp'>('credentials');
+  const [otpSession, setOtpSession] = useState<string | null>(null);
+  const [otpValue, setOtpValue] = useState('');
+  const [expiresAt, setExpiresAt] = useState<number | null>(null);
+  const [countdown, setCountdown] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const { register } = useAuth();
+  const { register, verifyRegisterOtp, resendRegisterOtp } = useAuth();
 
   const palette = compact ? WARM_PALETTE : COOL_PALETTE;
 
+  const handleRegisterResult = (result: LoginResult) => {
+    if (result.status === 'otp_required') {
+      setStage('otp');
+      setOtpSession(result.otpSession);
+      setOtpValue('');
+      setExpiresAt(Date.now() + result.expiresIn);
+    } else {
+      onSuccess?.();
+    }
+  };
+
+  useEffect(() => {
+    if (!expiresAt) {
+      setCountdown(null);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const diff = expiresAt - Date.now();
+      if (diff <= 0) {
+        setCountdown('00:00');
+        return;
+      }
+      const minutes = Math.floor(diff / 60000)
+        .toString()
+        .padStart(2, '0');
+      const seconds = Math.floor((diff % 60000) / 1000)
+        .toString()
+        .padStart(2, '0');
+      setCountdown(`${minutes}:${seconds}`);
+    };
+
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(timer);
+  }, [expiresAt]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (stage === 'otp') {
+      await handleOtpSubmit();
+      return;
+    }
+
     setError('');
 
     if (password !== confirmPassword) {
@@ -73,13 +123,62 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
     setIsLoading(true);
 
     try {
-      await register(username, email, password, name || undefined, avatarGender);
-      onSuccess?.();
+      const result = await register(username, email, password, name || undefined, avatarGender);
+      handleRegisterResult(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOtpSubmit = async () => {
+    if (!otpSession) {
+      setError('Verification session expired. Please restart the signup process.');
+      setStage('credentials');
+      return;
+    }
+
+    if (otpValue.length !== 6) {
+      setError('Enter the 6-digit code sent to your email.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      await verifyRegisterOtp(email, otpValue, otpSession);
+      onSuccess?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'OTP verification failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setError('');
+    setIsResending(true);
+    try {
+      const result = await resendRegisterOtp(email, password);
+      setOtpSession(result.otpSession);
+      setExpiresAt(Date.now() + result.expiresIn);
+      setOtpValue('');
+      setStage('otp');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resend code');
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  const handleBackToDetails = () => {
+    setStage('credentials');
+    setOtpSession(null);
+    setOtpValue('');
+    setExpiresAt(null);
+    setCountdown(null);
   };
 
   return (
@@ -109,7 +208,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
               />
               Join CodeVault
             </span>
-            <span className="text-white/70">Step 01</span>
+            <span className="text-white/70">{stage === 'credentials' ? 'Step 01' : 'Step 02'}</span>
           </div>
         </>
       )}
@@ -120,136 +219,212 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        
-        <div className="space-y-2">
-          <Label htmlFor="username" className="text-slate-200">
-            Username
-          </Label>
-          <Input
-            id="username"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            minLength={3}
-            maxLength={30}
-            disabled={isLoading}
-            className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="email" className="text-slate-200">
-            Email
-          </Label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            disabled={isLoading}
-            className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="name" className="text-slate-200">
-            Full Name (Optional)
-          </Label>
-          <Input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={isLoading}
-            className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
-          />
-        </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="avatar-gender" className="text-slate-200">
-            Select Gender
-          </Label>
-          <Select
-            value={avatarGender}
-            onValueChange={(value) => setAvatarGender(value as 'male' | 'female')}
-          >
-            <SelectTrigger id="avatar-gender" className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 ${palette.focusClass}`}>
-              <SelectValue placeholder="Choose your avatar base" />
-            </SelectTrigger>
-            <SelectContent className={`${palette.selectBg} text-slate-100`}>
-              <SelectItem value="male">Masculine • Adventurous</SelectItem>
-              <SelectItem value="female">Feminine • Elegant</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-slate-400">
-            We use this to craft a personalised CodeVault avatar the moment you join.
-          </p>
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="password" className="text-slate-200">
-            Password
-          </Label>
-          <div className="relative">
-            <Input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
+        {stage === 'credentials' ? (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="username" className="text-slate-200">
+                Username
+              </Label>
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                minLength={3}
+                maxLength={30}
+                disabled={isLoading}
+                className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-slate-200">
+                Email
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+                className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-slate-200">
+                Full Name (Optional)
+              </Label>
+              <Input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={isLoading}
+                className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="avatar-gender" className="text-slate-200">
+                Select Gender
+              </Label>
+              <Select
+                value={avatarGender}
+                onValueChange={(value) => setAvatarGender(value as 'male' | 'female')}
+              >
+                <SelectTrigger id="avatar-gender" className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 ${palette.focusClass}`}>
+                  <SelectValue placeholder="Choose your avatar base" />
+                </SelectTrigger>
+                <SelectContent className={`${palette.selectBg} text-slate-100`}>
+                <SelectItem value="male">Masculine - Adventurous</SelectItem>
+                <SelectItem value="female">Feminine - Elegant</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-400">
+                We use this to craft a personalised CodeVault avatar the moment you join.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-slate-200">
+                Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  disabled={isLoading}
+                  className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 pr-12 ${palette.focusClass}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  disabled={isLoading}
+                  className="absolute inset-y-0 right-4 flex items-center text-slate-400 transition hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-600"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword" className="text-slate-200">
+                Confirm Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 pr-12 ${palette.focusClass}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  disabled={isLoading}
+                  className="absolute inset-y-0 right-4 flex items-center text-slate-400 transition hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-600"
+                  aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              className={`h-12 w-full rounded-2xl bg-gradient-to-r ${palette.gradient} text-base font-semibold transition hover:scale-[1.01] ${palette.buttonHoverShadow}`}
               disabled={isLoading}
-              className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 pr-12 ${palette.focusClass}`}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((prev) => !prev)}
-              disabled={isLoading}
-              className="absolute inset-y-0 right-4 flex items-center text-slate-400 transition hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-600"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              style={{ boxShadow: palette.buttonShadow }}
             >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="confirmPassword" className="text-slate-200">
-            Confirm Password
-          </Label>
-          <div className="relative">
-            <Input
-              id="confirmPassword"
-              type={showConfirmPassword ? 'text' : 'password'}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              disabled={isLoading}
-              className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 pr-12 ${palette.focusClass}`}
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirmPassword((prev) => !prev)}
-              disabled={isLoading}
-              className="absolute inset-y-0 right-4 flex items-center text-slate-400 transition hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-600"
-              aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Create Account
+            </Button>
+          </>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-sm text-slate-400">
+              <button
+                type="button"
+                onClick={handleBackToDetails}
+                className="inline-flex items-center gap-1 text-slate-400 transition hover:text-slate-200"
+                disabled={isLoading || isResending}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </button>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                <ShieldCheck className="h-4 w-4 text-[#94d2bd]" />
+                <span className="text-xs uppercase tracking-[0.25em] text-slate-300">
+                  Email Verification
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-center">
+              <h3 className="text-lg font-semibold text-slate-100">Verify your email</h3>
+              <p className="text-sm text-slate-400">
+                Enter the 6-digit code we sent to <span className="text-slate-200">{email}</span> to activate your account.
+              </p>
+            </div>
+
+            <div className="flex justify-center">
+              <InputOTP
+                maxLength={6}
+                value={otpValue}
+                onChange={setOtpValue}
+                containerClassName="justify-between gap-2"
+                disabled={isLoading}
+              >
+                <InputOTPGroup className="flex w-full justify-between">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <InputOTPSlot
+                      key={index}
+                      index={index}
+                      className="h-14 w-14 rounded-2xl border-white/10 bg-white/5 text-xl font-semibold text-slate-100 shadow-[0_12px_40px_rgba(148,210,189,0.20)] backdrop-blur-sm"
+                    />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+
+            <Button
+              type="submit"
+              className="h-12 w-full rounded-2xl bg-gradient-to-r from-[#ee9b00] via-[#ca6702] to-[#0a9396] text-base font-semibold text-[#001219] shadow-[0_20px_60px_rgba(238,155,0,0.4)] transition hover:scale-[1.01] hover:shadow-[0_28px_80px_rgba(148,210,189,0.35)]"
+              disabled={isLoading || otpValue.length !== 6}
             >
-              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Verify & Enter
+            </Button>
+
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>
+                {countdown && countdown !== '00:00'
+                  ? `Code expires in ${countdown}`
+                  : 'Code expired'}
+              </span>
+              <button
+                type="button"
+                onClick={handleResendCode}
+                className="text-[#ee9b00] transition hover:text-[#0a9396]"
+                disabled={isResending || isLoading}
+              >
+                {isResending ? 'Sending…' : 'Resend code'}
+              </button>
+            </div>
           </div>
-        </div>
-        
-        <Button
-          type="submit"
-          className={`h-12 w-full rounded-2xl bg-gradient-to-r ${palette.gradient} text-base font-semibold transition hover:scale-[1.01] ${palette.buttonHoverShadow}`}
-          disabled={isLoading}
-          style={{ boxShadow: palette.buttonShadow }}
-        >
-          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Create Account
-        </Button>
+        )}
       </form>
       
       <div className="mt-8 text-center text-sm text-slate-300">
@@ -258,7 +433,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
           type="button"
           onClick={onSwitchToLogin}
           className={`font-semibold transition ${palette.linkClass}`}
-          disabled={isLoading}
+          disabled={isLoading || isResending}
         >
           Sign in
         </button>

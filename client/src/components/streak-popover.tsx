@@ -21,6 +21,24 @@ export function StreakPopover() {
   const streakGoal = userProfile?.streakGoal ?? 7;
   // No totalDaysActive from API; approximate with currentStreak for now
   const totalDaysActive = userProfile?.streak ?? 0;
+  const dailyProgressToday = userProfile?.dailyProgress ?? 0;
+  const hasProgressToday = dailyProgressToday > 0;
+  const now = new Date();
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+  const hoursLeft = (endOfDay.getTime() - now.getTime()) / (1000 * 60 * 60);
+  const isLateWarning = !hasProgressToday && hoursLeft <= 4;
+  const flameColor = isLateWarning ? "text-rose-500" : hasProgressToday ? "text-orange-500" : "text-muted-foreground";
+  const headerSubtitle = isLateWarning
+    ? "Clock's ticking — rescue today's streak."
+    : hasProgressToday
+    ? "Keep the fire burning!"
+    : "Kick off today's streak run.";
+  const progressBarGradient = isLateWarning
+    ? "from-rose-500 via-red-500 to-pink-500"
+    : hasProgressToday
+    ? "from-orange-400 via-red-500 to-pink-500"
+    : "from-slate-500 via-slate-600 to-slate-700";
 
   // Generate mini calendar for last 30 days
   const generateCalendar = () => {
@@ -53,15 +71,17 @@ export function StreakPopover() {
             whileHover={{ scale: 1.1, rotate: [0, -10, 10, -10, 0] }}
             transition={{ duration: 0.5 }}
           >
-            <Flame className="h-5 w-5 text-orange-500" />
+            <Flame className={`h-5 w-5 ${flameColor}`} />
           </motion.div>
-          {currentStreak > 0 && (
+          {(currentStreak > 0 || !hasProgressToday) && (
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
-              className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-orange-500 text-white text-[10px] font-bold flex items-center justify-center"
+              className={`absolute -top-1 -right-1 h-4 w-4 rounded-full text-white text-[10px] font-bold flex items-center justify-center ${
+                isLateWarning ? "bg-rose-500" : hasProgressToday ? "bg-orange-500" : "bg-slate-400"
+              } ${currentStreak > 0 ? "" : "text-transparent"}`}
             >
-              {currentStreak}
+              {currentStreak > 0 ? currentStreak : ""}
             </motion.div>
           )}
         </Button>
@@ -81,7 +101,9 @@ export function StreakPopover() {
               </div>
               <div>
                 <h3 className="font-bold text-lg">Streak Stats</h3>
-                <p className="text-xs text-muted-foreground">Keep the fire burning!</p>
+                <p className={`text-xs ${isLateWarning ? "text-rose-500 dark:text-rose-400" : "text-muted-foreground"}`}>
+                  {headerSubtitle}
+                </p>
               </div>
             </div>
           </div>
@@ -172,7 +194,10 @@ export function StreakPopover() {
           <div className="pt-2 border-t">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">Progress to Goal</span>
-              <Badge variant="secondary" className="text-xs">
+              <Badge
+                variant="secondary"
+                className={`text-xs ${isLateWarning ? "bg-rose-500/20 text-rose-500 border-rose-500/30" : "bg-secondary text-foreground"}`}
+              >
                 {Math.round((currentStreak / streakGoal) * 100)}%
               </Badge>
             </div>
@@ -181,9 +206,14 @@ export function StreakPopover() {
                 initial={{ width: 0 }}
                 animate={{ width: `${Math.min((currentStreak / streakGoal) * 100, 100)}%` }}
                 transition={{ duration: 0.5, ease: "easeOut" }}
-                className="h-full bg-gradient-to-r from-orange-400 via-red-500 to-pink-500"
+                className={`h-full bg-gradient-to-r ${progressBarGradient}`}
               />
             </div>
+            {!hasProgressToday && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Finish at least one problem today to keep the streak alive.
+              </p>
+            )}
           </div>
         </motion.div>
       </PopoverContent>

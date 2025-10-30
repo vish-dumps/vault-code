@@ -28,7 +28,15 @@ If you do not already have an account, create one with a `POST` request:
     "avatarGender": "female"
   }
   ```
-- Save the `token` from the response if you want to skip OTP for this session. Otherwise continue with the OTP login flow.
+- The response includes `otpRequired`, `otpSession`, and `expiresIn`. Complete signup by calling `POST /api/auth/register/verify` with:
+  ```json
+  {
+    "email": "alice@example.com",
+    "otp": "123456",
+    "otpSession": "<session-token>"
+  }
+  ```
+- Need a fresh code? `POST /api/auth/register/resend` with the same email/password to receive a new session id.
 
 ## 3. Request OTP (login)
 Send the credentials to receive an OTP challenge:

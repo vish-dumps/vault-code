@@ -45,6 +45,11 @@ const verifyOtpSchema = z.object({
   otpSession: z.string().min(16),
 });
 
+const resendRegisterOtpSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
 // Register endpoint
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -76,15 +81,88 @@ router.post('/register', async (req: Request, res: Response) => {
 
     await user.save();
 
-    // Generate JWT token
+    const otpCode = generateOtpCode();
+    const otpSession = createOtpSessionToken();
+    const otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+    user.set({
+      otpCodeHash: hashOtpCode(otpCode),
+      otpSession,
+      otpExpiresAt,
+      otpVerifiedAt: undefined,
+    });
+    await user.save();
+
+    await sendOtpEmail({
+      to: user.email,
+      code: otpCode,
+      expiresAt: otpExpiresAt,
+    });
+
+    if (!IS_PRODUCTION) {
+      console.info(
+        `[Auth] Signup OTP for ${user.email}: ${otpCode} (expires in ${OTP_EXPIRY_MINUTES} minutes)`
+      );
+    }
+
+    res.json({
+      message: 'OTP verification required',
+      otpRequired: true,
+      otpSession,
+      expiresIn: OTP_EXPIRY_MS,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ 
+        error: 'Validation error', 
+        details: error.errors 
+      });
+    }
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Registration OTP verification endpoint
+router.post('/register/verify', async (req: Request, res: Response) => {
+  try {
+    const { email, otp, otpSession } = verifyOtpSchema.parse(req.body);
+    const user = await UserModel.findOne({ email }).select(
+      '+otpCodeHash +otpExpiresAt +otpSession'
+    );
+
+    if (!user || !user.otpCodeHash || !user.otpExpiresAt || !user.otpSession) {
+      return res.status(400).json({ error: 'Verification code not found' });
+    }
+
+    if (user.otpSession !== otpSession) {
+      return res.status(400).json({ error: 'Invalid verification session' });
+    }
+
+    if (user.otpExpiresAt.getTime() < Date.now()) {
+      return res.status(400).json({ error: 'Verification code expired' });
+    }
+
+    const providedHash = hashOtpCode(otp);
+    if (providedHash !== user.otpCodeHash) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    user.set({
+      otpCodeHash: undefined,
+      otpExpiresAt: undefined,
+      otpSession: undefined,
+      otpVerifiedAt: new Date(),
+    });
+    await user.save();
+
     const token = generateToken({
       userId: user._id.toString(),
       username: user.username,
       email: user.email,
     });
 
-    res.status(201).json({
-      message: 'User created successfully',
+    res.json({
+      message: 'Registration complete',
       token,
       user: {
         id: user._id.toString(),
@@ -115,8 +193,68 @@ router.post('/register', async (req: Request, res: Response) => {
         details: error.errors 
       });
     }
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Failed to create user' });
+    console.error('Registration verification error:', error);
+    res.status(500).json({ error: 'Failed to verify registration' });
+  }
+});
+
+router.post('/register/resend', async (req: Request, res: Response) => {
+  try {
+    const { email, password } = resendRegisterOtpSchema.parse(req.body);
+    const user = await UserModel.findOne({ email }).select(
+      '+otpCodeHash +otpExpiresAt +otpSession'
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (user.otpVerifiedAt) {
+      return res.status(400).json({ error: 'Account already verified' });
+    }
+
+    const otpCode = generateOtpCode();
+    const otpSession = createOtpSessionToken();
+    const otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+    user.set({
+      otpCodeHash: hashOtpCode(otpCode),
+      otpSession,
+      otpExpiresAt,
+      otpVerifiedAt: undefined,
+    });
+    await user.save();
+
+    await sendOtpEmail({
+      to: user.email,
+      code: otpCode,
+      expiresAt: otpExpiresAt,
+    });
+
+    if (!IS_PRODUCTION) {
+      console.info(
+        `[Auth] Signup OTP resend for ${user.email}: ${otpCode} (expires in ${OTP_EXPIRY_MINUTES} minutes)`
+      );
+    }
+
+    res.json({
+      message: 'Verification code resent',
+      otpSession,
+      expiresIn: OTP_EXPIRY_MS,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Validation error',
+        details: error.errors,
+      });
+    }
+    console.error('Registration resend error:', error);
+    res.status(500).json({ error: 'Failed to resend verification code' });
   }
 });
 

@@ -42,10 +42,13 @@ interface AuthContextType {
     password: string,
     name: string | undefined,
     avatarGender: AvatarGender
-  ) => Promise<void>;
+  ) => Promise<LoginResult>;
+  verifyRegisterOtp: (email: string, otp: string, otpSession: string) => Promise<void>;
+  resendRegisterOtp: (email: string, password: string) => Promise<{ otpSession: string; expiresIn: number }>;
   logout: () => void;
   isLoading: boolean;
   isAuthenticated: boolean;
+  updateUser: (updates: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -192,7 +195,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     password: string,
     name: string | undefined,
     avatarGender: AvatarGender
-  ) => {
+  ): Promise<LoginResult> => {
     try {
       const response = await apiRequest('POST', '/api/auth/register', {
         username,
@@ -202,22 +205,70 @@ export function AuthProvider({ children }: AuthProviderProps) {
         avatarGender,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Registration failed');
+      const data = await response.json();
+      if (data.otpRequired) {
+        return {
+          status: 'otp_required',
+          otpSession: data.otpSession,
+          expiresIn: data.expiresIn,
+        };
       }
 
-      const data = await response.json();
       const { token: newToken, user: userData } = data;
 
       // Store token and user data
       localStorage.setItem('authToken', newToken);
       setToken(newToken);
       setUser(mapUser(userData));
+      return { status: 'authenticated' };
     } catch (error) {
       console.error('Registration error:', error);
       throw error;
     }
+  };
+
+  const verifyRegisterOtp = async (email: string, otp: string, otpSession: string) => {
+    try {
+      const response = await apiRequest('POST', '/api/auth/register/verify', {
+        email,
+        otp,
+        otpSession,
+      });
+
+      const data = await response.json();
+      const { token: newToken, user: userData } = data;
+
+      localStorage.setItem('authToken', newToken);
+      setToken(newToken);
+      setUser(mapUser(userData));
+    } catch (error) {
+      console.error('Registration OTP verification error:', error);
+      throw error;
+    }
+  };
+
+  const resendRegisterOtp = async (email: string, password: string) => {
+    try {
+      const response = await apiRequest('POST', '/api/auth/register/resend', {
+        email,
+        password,
+      });
+      const data = await response.json();
+      return {
+        otpSession: data.otpSession as string,
+        expiresIn: data.expiresIn as number,
+      };
+    } catch (error) {
+      console.error('Resend registration OTP error:', error);
+      throw error;
+    }
+  };
+
+  const updateUserProfile = (updates: Partial<User>) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      return mapUser({ ...prev, ...updates });
+    });
   };
 
   const logout = () => {
@@ -232,9 +283,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     login,
     verifyOtp,
     register,
+    verifyRegisterOtp,
+    resendRegisterOtp,
     logout,
     isLoading,
     isAuthenticated: !!user && !!token,
+    updateUser: updateUserProfile,
   };
 
   return (

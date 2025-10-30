@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Save, Link as LinkIcon, RefreshCw, Upload, Sparkles, Rocket, Zap, ArrowRight } from "lucide-react";
+import { Save, Link as LinkIcon, RefreshCw, Upload, Sparkles, Rocket, Zap, ArrowRight, Pencil, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { SiLeetcode, SiCodeforces } from "react-icons/si";
@@ -20,20 +20,25 @@ import { MilestonesCard } from "@/components/milestones-card";
 import { ContributionHeatmap } from "@/components/contribution-heatmap";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
+import { toTitleCase } from "@/lib/text";
 import type { QuestionWithDetails, TopicProgress } from "@shared/schema";
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [leetcodeUsername, setLeetcodeUsername] = useState("");
   const [codeforcesUsername, setCodeforcesUsername] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [usernameValue, setUsernameValue] = useState("");
+  const [email, setEmail] = useState("");
   const [profileImage, setProfileImage] = useState("");
   const [avatarType, setAvatarType] = useState<'initials' | 'random' | 'custom'>('initials');
   const [avatarGender, setAvatarGender] = useState<'male' | 'female'>('male');
   const [customAvatarUrl, setCustomAvatarUrl] = useState("");
   const [randomAvatarSeed, setRandomAvatarSeed] = useState<number>(Date.now());
   const [isAvatarDialogOpen, setIsAvatarDialogOpen] = useState(false);
+  const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const MAX_PROFILE_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB cap to keep base64 reasonable
@@ -77,16 +82,19 @@ export default function Profile() {
   // Fetch questions for stats
   const { data: questions = [] } = useQuery<QuestionWithDetails[]>({
     queryKey: ["/api/questions"],
+    refetchInterval: 30000,
   });
 
   // Fetch topic progress for graph
   const { data: topicProgress = [] } = useQuery<TopicProgress[]>({
     queryKey: ["/api/topics"],
+    refetchInterval: 60000,
   });
 
   // Fetch todos for productivity metrics
   const { data: todos = [] } = useQuery<any[]>({
     queryKey: ["/api/todos"],
+    refetchInterval: 30000,
   });
 
   // Update local state when user profile loads (only once)
@@ -94,6 +102,9 @@ export default function Profile() {
     if (userProfile && !isInitialized) {
       setLeetcodeUsername(userProfile.leetcodeUsername || "");
       setCodeforcesUsername(userProfile.codeforcesUsername || "");
+      setFullName(userProfile.name || "");
+      setUsernameValue(userProfile.username || "");
+      setEmail(userProfile.email || "");
       const storedProfileImage = userProfile.profileImage || "";
       setProfileImage(storedProfileImage);
       
@@ -111,9 +122,37 @@ export default function Profile() {
   const saveProfileMutation = useMutation({
     mutationFn: async (data: any) => {
       const response = await apiRequest("PATCH", "/api/user/profile", data);
-      return response.json();
+      const result = await response.json();
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (updatedUser: any) => {
+      if (updatedUser) {
+        setLeetcodeUsername(updatedUser.leetcodeUsername || "");
+        setCodeforcesUsername(updatedUser.codeforcesUsername || "");
+        setFullName(updatedUser.name || "");
+        setUsernameValue(updatedUser.username || "");
+        setEmail(updatedUser.email || "");
+        setAvatarType(updatedUser.avatarType || "initials");
+        setAvatarGender(updatedUser.avatarGender || "male");
+        setCustomAvatarUrl(updatedUser.customAvatarUrl || "");
+        setProfileImage(updatedUser.profileImage || "");
+        if (typeof updatedUser.randomAvatarSeed === "number") {
+          setRandomAvatarSeed(updatedUser.randomAvatarSeed);
+        }
+        updateUser({
+          name: updatedUser.name ?? undefined,
+          username: updatedUser.username ?? usernameValue,
+          email: updatedUser.email ?? email,
+          avatarType: updatedUser.avatarType ?? avatarType,
+          avatarGender: updatedUser.avatarGender ?? avatarGender,
+          customAvatarUrl: updatedUser.customAvatarUrl ?? null,
+          profileImage: updatedUser.profileImage ?? null,
+          randomAvatarSeed:
+            typeof updatedUser.randomAvatarSeed === "number"
+              ? updatedUser.randomAvatarSeed
+              : undefined,
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
       toast({ title: "Success", description: "Profile updated successfully" });
     },
@@ -194,7 +233,11 @@ export default function Profile() {
       payload.customAvatarUrl = null;
     }
 
-    saveProfileMutation.mutate(payload);
+    saveProfileMutation.mutate(payload, {
+      onSuccess: () => {
+        setIsAccountDialogOpen(false);
+      },
+    });
   };
 
   const handleGenerateNewAvatar = () => {
@@ -208,6 +251,47 @@ export default function Profile() {
     setAvatarType("initials");
     setProfileImage("");
     setCustomAvatarUrl("");
+  };
+
+  const handleSaveAccountInfo = () => {
+    const trimmedName = fullName.trim();
+    const trimmedUsername = usernameValue.trim();
+
+    if (!trimmedUsername) {
+      toast({
+        title: "Username required",
+        description: "Please choose a username to display on your profile.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (trimmedUsername.length < 3 || trimmedUsername.length > 30) {
+      toast({
+        title: "Username length",
+        description: "Username should be between 3 and 30 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const payload: Record<string, any> = {};
+    if (trimmedName !== (userProfile?.name || "")) {
+      payload.name = trimmedName;
+    }
+    if (trimmedUsername !== (userProfile?.username || "")) {
+      payload.username = trimmedUsername;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      toast({
+        title: "No changes detected",
+        description: "Update your name or username before saving.",
+      });
+      return;
+    }
+
+    saveProfileMutation.mutate(payload);
   };
 
   const getAvatarUrl = () => {
@@ -228,6 +312,13 @@ export default function Profile() {
   };
 
   const todayKey = normalizeDateKey(new Date());
+
+  const formattedProfileName = useMemo(() => {
+    if (userProfile?.name && userProfile.name.trim().length > 0) {
+      return toTitleCase(userProfile.name);
+    }
+    return userProfile?.username || "User";
+  }, [userProfile?.name, userProfile?.username]);
 
   const heatmapData = useMemo(() => {
     const counts = new Map<string, number>();
@@ -353,7 +444,7 @@ export default function Profile() {
 
   // Get user initials
   const getInitials = () => {
-    const name = userProfile?.name || userProfile?.username || "User";
+    const name = formattedProfileName;
     return name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
@@ -363,7 +454,7 @@ export default function Profile() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 overflow-x-hidden">
       <div>
         <h1 className="text-3xl font-bold">Profile</h1>
         <p className="text-muted-foreground mt-1">
@@ -434,11 +525,81 @@ export default function Profile() {
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="space-y-6 lg:col-span-1">
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-1 min-w-0">
           <Card data-testid="card-user-info">
-            <CardHeader>
+            <CardHeader className="flex items-center justify-between">
               <CardTitle>User Information</CardTitle>
+              <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    <span className="sr-only">Edit account details</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Edit account details</DialogTitle>
+                    <DialogDescription>
+                      Update how your name and username appear across CodeVault.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="account-full-name-dialog">Full Name</Label>
+                      <Input
+                        id="account-full-name-dialog"
+                        placeholder="Enter your full name"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        disabled={saveProfileMutation.isPending}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="account-username-dialog">Username</Label>
+                      <Input
+                        id="account-username-dialog"
+                        placeholder="Choose a username"
+                        value={usernameValue}
+                        onChange={(e) => setUsernameValue(e.target.value)}
+                        minLength={3}
+                        maxLength={30}
+                        disabled={saveProfileMutation.isPending}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Your username is visible on leaderboards, shared workspaces, and invites.
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setFullName(userProfile?.name || '');
+                          setUsernameValue(userProfile?.username || '');
+                          setIsAccountDialogOpen(false);
+                        }}
+                        disabled={saveProfileMutation.isPending}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleSaveAccountInfo}
+                        disabled={saveProfileMutation.isPending}
+                      >
+                        {saveProfileMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Save Changes
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col items-center gap-4">
@@ -489,8 +650,8 @@ export default function Profile() {
                             <SelectValue placeholder="Select a style" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="male">Bold • Adventurous</SelectItem>
-                            <SelectItem value="female">Vivid • Elegant</SelectItem>
+                            <SelectItem value="male">Bold - Adventurous</SelectItem>
+                            <SelectItem value="female">Vivid - Elegant</SelectItem>
                           </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
@@ -552,7 +713,7 @@ export default function Profile() {
                   </DialogContent>
                 </Dialog>
                 <div className="text-center">
-                  <h3 className="font-semibold text-lg">{userProfile?.name || userProfile?.username || "User"}</h3>
+                  <h3 className="font-semibold text-lg">{formattedProfileName}</h3>
                   <p className="text-sm text-muted-foreground">
                     {userProfile?.email || "No email"}
                   </p>
@@ -581,14 +742,79 @@ export default function Profile() {
                   <Badge variant="secondary">{userProfile?.streak || 0} {userProfile?.streak === 1 ? 'day' : 'days'}</Badge>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+          </CardContent>
+        </Card>
 
-          <Card data-testid="card-connected-accounts">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <LinkIcon className="h-5 w-5" />
-                Connected Accounts
+        <Card data-testid="card-account-details">
+          <CardHeader>
+            <CardTitle>Account Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="account-full-name">Full Name</Label>
+              <Input
+                id="account-full-name"
+                placeholder="Enter your full name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                data-testid="input-account-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="account-username">Username</Label>
+              <Input
+                id="account-username"
+                placeholder="Choose a username"
+                value={usernameValue}
+                onChange={(e) => setUsernameValue(e.target.value)}
+                minLength={3}
+                maxLength={30}
+                data-testid="input-account-username"
+              />
+              <p className="text-xs text-muted-foreground">
+                This is how you appear across CodeVault. Letters, numbers, and underscores are allowed.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="account-email">Email</Label>
+              <Input
+                id="account-email"
+                value={email}
+                disabled
+              />
+              <p className="text-xs text-muted-foreground">
+                Contact support to change your email address.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setFullName(userProfile?.name || "");
+                  setUsernameValue(userProfile?.username || "");
+                }}
+                disabled={saveProfileMutation.isPending}
+              >
+                Reset
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveAccountInfo}
+                disabled={saveProfileMutation.isPending}
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Save Changes
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-connected-accounts">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <LinkIcon className="h-5 w-5" />
+              Connected Accounts
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -665,13 +891,20 @@ export default function Profile() {
             </CardContent>
           </Card>
 
-          {/* Contribution Heatmap */}
-          <ContributionHeatmap data={heatmapData} />
+          <ProductivityMetricsCard
+            tasksAddedDaily={tasksAddedDaily}
+            tasksCompletedDaily={tasksCompletedDaily}
+            totalTasks={totalTasks}
+            consistencyScore={consistencyScore}
+            historicalStats={todoHistory}
+          />
         </div>
 
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6 min-w-0">
           {/* Daily Activity Chart */}
           <DailyActivityChart data={dailyActivityData} />
+
+          <ContributionHeatmap data={heatmapData} />
 
           {/* Grid for Consistency and Milestones */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -684,14 +917,6 @@ export default function Profile() {
             <MilestonesCard />
           </div>
 
-          {/* Productivity Metrics */}
-          <ProductivityMetricsCard
-            tasksAddedDaily={tasksAddedDaily}
-            tasksCompletedDaily={tasksCompletedDaily}
-            totalTasks={totalTasks}
-            consistencyScore={consistencyScore}
-            historicalStats={todoHistory}
-          />
         </div>
       </div>
     </div>

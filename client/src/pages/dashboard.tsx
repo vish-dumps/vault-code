@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
+import { toTitleCase } from "@/lib/text";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -53,31 +54,42 @@ export default function Dashboard() {
   // Fetch questions to calculate stats
   const { data: questions = [] } = useQuery<QuestionWithDetails[]>({
     queryKey: ["/api/questions"],
+    refetchInterval: 30000,
   });
 
   // Fetch contests
-  const { data: contests = [] } = useQuery<Contest[]>({
+  const {
+    data: contests = [],
+    isLoading: areContestsLoading,
+    isError: contestsError,
+    refetch: refetchContests,
+  } = useQuery<Contest[]>({
     queryKey: ["/api/contests"],
+    refetchInterval: 5 * 60 * 1000,
   });
 
   // Fetch topic progress
   const { data: topicProgress = [] } = useQuery<TopicProgress[]>({
     queryKey: ["/api/topics"],
+    refetchInterval: 60000,
   });
 
   // Fetch snippets count
   const { data: snippets = [] } = useQuery<any[]>({
     queryKey: ["/api/snippets"],
+    refetchInterval: 60000,
   });
 
   // Fetch todos
   const { data: todos = [] } = useQuery<Todo[]>({
     queryKey: ["/api/todos"],
+    refetchInterval: 30000,
   });
 
   // Fetch user profile for streak
   const { data: userProfile } = useQuery<any>({
     queryKey: ["/api/user/profile"],
+    refetchInterval: 60000,
   });
 
   // Update goal mutation
@@ -211,6 +223,50 @@ export default function Dashboard() {
     }, 0);
   }, [questions]);
   const dailyProgress = Math.max(userProfile?.dailyProgress ?? 0, todaysQuestionsCount);
+  const hasStartedToday = dailyProgress > 0;
+  const now = new Date();
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+  const hoursLeftInDay = (endOfDay.getTime() - now.getTime()) / (1000 * 60 * 60);
+  const isLateWarning = !hasStartedToday && hoursLeftInDay <= 4;
+  const streakGradientStops = isLateWarning
+    ? { start: "#fb7185", mid: "#f43f5e", end: "#e11d48" }
+    : hasStartedToday
+    ? { start: "#f97316", mid: "#ea580c", end: "#dc2626" }
+    : { start: "#a1a1aa", mid: "#6b7280", end: "#4b5563" };
+  const fireGradientStops = isLateWarning
+    ? { start: "#fb7185", mid: "#f43f5e", end: "#e11d48" }
+    : hasStartedToday
+    ? { start: "#f97316", mid: "#ea580c", end: "#dc2626" }
+    : { start: "#cbd5f5", mid: "#94a3b8", end: "#64748b" };
+  const streakLabelColor = isLateWarning
+    ? "text-rose-600 dark:text-rose-400"
+    : hasStartedToday
+    ? "text-orange-600 dark:text-orange-400"
+    : "text-muted-foreground";
+  const streakGlowClass = isLateWarning
+    ? "from-rose-500/20 to-red-500/20"
+    : hasStartedToday
+    ? "from-orange-400/15 to-red-400/15"
+    : "from-slate-400/20 to-slate-500/20";
+  const streakCardClass = [
+    "group hover:shadow-2xl transition-all duration-300 border h-full overflow-hidden relative",
+    isLateWarning
+      ? "bg-gradient-to-br from-rose-50 to-red-100/70 dark:from-rose-950/20 dark:to-red-900/20 border-rose-200/60 dark:border-rose-800/40"
+      : hasStartedToday
+      ? "bg-gradient-to-br from-orange-50 to-red-50/50 dark:from-orange-950/20 dark:to-red-900/10 border-orange-200/50 dark:border-orange-800/30"
+      : "bg-gradient-to-br from-slate-100 to-slate-200/70 dark:from-slate-900/60 dark:to-slate-800/40 border-slate-200/60 dark:border-slate-700/40",
+  ].join(" ");
+  const streakStatusMessage = hasStartedToday
+    ? `${currentStreak}/${streakGoal} goal • ${streakGoal > 0 ? Math.round(Math.min((currentStreak / streakGoal) * 100, 100)) : 0}%`
+    : isLateWarning
+    ? "Finish a problem before midnight to keep your streak!"
+    : "Save your streak — log today's first problem.";
+  const streakRingBackground = isLateWarning
+    ? "text-rose-200/40 dark:text-rose-900/30"
+    : hasStartedToday
+    ? "text-orange-200/30 dark:text-orange-900/30"
+    : "text-slate-300/50 dark:text-slate-700/60";
 
   // Filter todos
   const filteredTodos = todos.filter(todo => {
@@ -296,6 +352,13 @@ export default function Dashboard() {
   ];
   const randomQuote = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
 
+  const formattedName = useMemo(() => {
+    if (user?.name && user.name.trim().length > 0) {
+      return toTitleCase(user.name);
+    }
+    return user?.username || "Coder";
+  }, [user?.name, user?.username]);
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-gradient-to-br from-background via-background to-purple-50/20 dark:to-purple-950/10 p-4">
       <motion.div 
@@ -307,7 +370,7 @@ export default function Dashboard() {
         <div className="text-sm font-medium text-muted-foreground mb-1">Welcome Back,</div>
         <h1 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-none mb-2">
           <span className="bg-gradient-to-r from-[#d397fa] via-[#a78bfa] to-[#8364e8] bg-clip-text text-transparent animate-gradient">
-            {user?.name || user?.username || "Coder"}
+            {formattedName}
           </span>
         </h1>
         <p className="text-muted-foreground text-sm md:text-base">Let&rsquo;s make today count. Keep building your coding skills!</p>
@@ -382,12 +445,12 @@ export default function Dashboard() {
             >
             <Tooltip>
               <TooltipTrigger asChild>
-                <Card className="bg-gradient-to-br from-orange-50 to-red-50/50 dark:from-orange-950/20 dark:to-red-900/10 group hover:shadow-2xl transition-all duration-300 border-orange-200/50 dark:border-orange-800/30 h-full overflow-hidden relative">
+                <Card className={streakCardClass}>
               {/* Animated background glow */}
-              <div className="absolute inset-0 bg-gradient-to-br from-orange-400/10 to-red-400/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className={`absolute inset-0 bg-gradient-to-br ${streakGlowClass} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
               <CardContent className="p-4 h-full flex flex-col justify-between relative z-10">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">Streak</span>
+                  <span className={`text-xs font-semibold ${streakLabelColor}`}>Streak</span>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -411,7 +474,7 @@ export default function Dashboard() {
                         stroke="currentColor" 
                         strokeWidth="4" 
                         fill="none" 
-                        className="text-orange-200/30 dark:text-orange-900/30" 
+                        className={streakRingBackground} 
                       />
                       <motion.circle
                         initial={{ strokeDashoffset: 2 * Math.PI * 44 }}
@@ -429,20 +492,24 @@ export default function Dashboard() {
                       />
                       <defs>
                         <linearGradient id="streakGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#f97316" />
-                          <stop offset="50%" stopColor="#ea580c" />
-                          <stop offset="100%" stopColor="#dc2626" />
+                          <stop offset="0%" stopColor={streakGradientStops.start} />
+                          <stop offset="50%" stopColor={streakGradientStops.mid} />
+                          <stop offset="100%" stopColor={streakGradientStops.end} />
                         </linearGradient>
                       </defs>
                     </svg>
                     {/* Fire Logo with Negative Space Text */}
                     <div className="relative w-16 h-16">
-                      <svg viewBox="0 0 490 522" className={`w-full h-full ${currentStreak >= streakGoal ? 'animate-pulse' : ''}`} xmlns="http://www.w3.org/2000/svg">
+                      <svg
+                        viewBox="0 0 490 522"
+                        className={`w-full h-full ${currentStreak >= streakGoal ? 'animate-pulse' : ''} ${isLateWarning ? 'animate-[pulse_1.4s_ease-in-out_infinite]' : ''}`}
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
                         <defs>
                           <linearGradient id="fireGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stopColor="#f97316" />
-                            <stop offset="50%" stopColor="#ea580c" />
-                            <stop offset="100%" stopColor="#dc2626" />
+                            <stop offset="0%" stopColor={fireGradientStops.start} />
+                            <stop offset="50%" stopColor={fireGradientStops.mid} />
+                            <stop offset="100%" stopColor={fireGradientStops.end} />
                           </linearGradient>
                           <mask id="textMask">
                             <rect width="490" height="522" fill="white" />
@@ -471,13 +538,13 @@ export default function Dashboard() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.5 }}
-                    className="text-xs text-muted-foreground mt-1 font-medium"
+                    className={`text-xs mt-1 font-medium ${hasStartedToday ? 'text-muted-foreground' : isLateWarning ? 'text-rose-500 dark:text-rose-400' : 'text-muted-foreground'}`}
                   >
                     {currentStreak === 1 ? 'day' : 'days'}
                   </motion.div>
                 </div>
-                <div className="text-[10px] text-center text-muted-foreground font-medium">
-                  {currentStreak}/{streakGoal} goal • {Math.round((currentStreak / streakGoal) * 100)}%
+                <div className={`text-[10px] text-center font-medium ${hasStartedToday ? 'text-muted-foreground' : isLateWarning ? 'text-rose-500 dark:text-rose-400' : 'text-muted-foreground'}`}>
+                  {streakStatusMessage}
                 </div>
               </CardContent>
                 </Card>
@@ -486,6 +553,9 @@ export default function Dashboard() {
                 <div className="text-xs">
                   <div>Current: {currentStreak} days</div>
                   <div>Goal: {streakGoal} days</div>
+                  {!hasStartedToday && (
+                    <div>Time left today: ~{Math.max(0, Math.ceil(hoursLeftInDay))}h</div>
+                  )}
                 </div>
               </TooltipContent>
             </Tooltip>
@@ -548,7 +618,12 @@ export default function Dashboard() {
           transition={{ duration: 0.4, delay: 0.2 }}
           className="lg:col-span-1 h-full overflow-hidden min-h-0"
         >
-          <ContestList contests={contests} />
+          <ContestList
+            contests={contests}
+            isLoading={areContestsLoading}
+            isError={contestsError}
+            onRetry={() => refetchContests()}
+          />
         </motion.div>
 
         {/* Right: TODO List - Full Height Sidebar */}
@@ -578,11 +653,11 @@ export default function Dashboard() {
               <Input placeholder="Add a new task..." value={newTodoTitle} onChange={(e) => setNewTodoTitle(e.target.value)} className="h-8 text-sm bg-white/50 dark:bg-slate-900/50 border-cyan-200 dark:border-cyan-800/30 focus-visible:ring-cyan-500" />
               <Button type="submit" disabled={!newTodoTitle.trim()} size="sm" className="h-8 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600"><Plus className="h-3 w-3" /></Button>
             </form>
-            <Tabs value={todoFilter} onValueChange={(v) => setTodoFilter(v as any)} className="flex-shrink-0">
-              <TabsList className="grid w-full grid-cols-3 h-8 bg-white/50 dark:bg-slate-900/50 border border-cyan-200/50 dark:border-cyan-800/30">
-                <TabsTrigger value="all" className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">All</TabsTrigger>
-                <TabsTrigger value="active" className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">Active</TabsTrigger>
-                <TabsTrigger value="completed" className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">Done</TabsTrigger>
+            <Tabs value={todoFilter} onValueChange={(v) => setTodoFilter(v as any)} className="flex-shrink-0 w-full">
+              <TabsList className="grid w-full grid-cols-3 h-8 rounded-xl bg-white/60 dark:bg-slate-900/60 border border-cyan-200/50 dark:border-cyan-800/40 overflow-hidden">
+                <TabsTrigger value="all" className="text-xs w-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">All</TabsTrigger>
+                <TabsTrigger value="active" className="text-xs w-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">Active</TabsTrigger>
+                <TabsTrigger value="completed" className="text-xs w-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white">Done</TabsTrigger>
               </TabsList>
             </Tabs>
             <div className="space-y-2 flex-1 overflow-y-auto pr-1 mt-1">

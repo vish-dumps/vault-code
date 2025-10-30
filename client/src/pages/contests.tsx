@@ -2,45 +2,8 @@ import { ContestList } from "@/components/contest-list";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Trophy } from "lucide-react";
-
-//todo: remove mock functionality
-const upcomingContests = [
-  {
-    id: "1",
-    name: "Codeforces Round #912 (Div. 2)",
-    platform: "Codeforces",
-    startTime: "Oct 25, 2025 at 8:35 PM",
-    url: "https://codeforces.com",
-  },
-  {
-    id: "2",
-    name: "Weekly Contest 419",
-    platform: "LeetCode",
-    startTime: "Oct 27, 2025 at 10:00 AM",
-    url: "https://leetcode.com",
-  },
-  {
-    id: "3",
-    name: "CodeChef Starters 110",
-    platform: "CodeChef",
-    startTime: "Oct 28, 2025 at 8:00 PM",
-    url: "https://codechef.com",
-  },
-  {
-    id: "4",
-    name: "AtCoder Beginner Contest 325",
-    platform: "AtCoder",
-    startTime: "Oct 29, 2025 at 9:00 AM",
-    url: "https://atcoder.jp",
-  },
-  {
-    id: "5",
-    name: "Codeforces Round #913 (Div. 1)",
-    platform: "Codeforces",
-    startTime: "Oct 30, 2025 at 7:00 PM",
-    url: "https://codeforces.com",
-  },
-];
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 //todo: remove mock functionality
 const recentContests = [
@@ -63,6 +26,20 @@ const recentContests = [
 ];
 
 export default function Contests() {
+  const {
+    data: upcomingContests = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ["/api/contests"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/contests");
+      return response.json();
+    },
+    refetchInterval: 5 * 60 * 1000,
+  });
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -74,7 +51,12 @@ export default function Contests() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <ContestList contests={upcomingContests} />
+          <ContestList
+            contests={upcomingContests}
+            isLoading={isLoading}
+            isError={isError}
+            onRetry={() => refetch()}
+          />
         </div>
 
         <div className="space-y-4">
