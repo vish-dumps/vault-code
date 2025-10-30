@@ -19,6 +19,7 @@ import Workspace from "@/pages/workspace";
 import Snippets from "@/pages/snippets";
 import Contests from "@/pages/contests";
 import Profile from "@/pages/profile";
+import Guide from "@/pages/guide";
 import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
 
@@ -33,6 +34,7 @@ function AuthenticatedRoutes() {
       <Route path="/questions/:id" component={QuestionDetails} />
       <Route path="/contests" component={Contests} />
       <Route path="/profile" component={Profile} />
+      <Route path="/guide" component={Guide} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Save, Link as LinkIcon, RefreshCw, Upload } from "lucide-react";
+import { Save, Link as LinkIcon, RefreshCw, Upload, Sparkles, Rocket, Zap, ArrowRight } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { SiLeetcode, SiCodeforces } from "react-icons/si";
@@ -18,11 +18,14 @@ import { ConsistencyScoreCard } from "@/components/consistency-score-card";
 import { ProductivityMetricsCard } from "@/components/productivity-metrics-card";
 import { MilestonesCard } from "@/components/milestones-card";
 import { ContributionHeatmap } from "@/components/contribution-heatmap";
+import { motion } from "framer-motion";
+import { useLocation } from "wouter";
 import type { QuestionWithDetails, TopicProgress } from "@shared/schema";
 
 export default function Profile() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [leetcodeUsername, setLeetcodeUsername] = useState("");
   const [codeforcesUsername, setCodeforcesUsername] = useState("");
   const [profileImage, setProfileImage] = useState("");
@@ -34,6 +37,37 @@ export default function Profile() {
   const [isInitialized, setIsInitialized] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const MAX_PROFILE_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB cap to keep base64 reasonable
+
+  const highlightCards = [
+    {
+      title: "Unlock the CodeVault Playbook",
+      description:
+        "Follow a guided loop for capturing, organising, and executing your practice sessions without losing momentum.",
+      icon: Sparkles,
+      accent: "from-purple-500/30 via-fuchsia-500/20 to-sky-500/20",
+      badge: "New",
+      destination: "/guide",
+      cta: "View usage guide",
+    },
+    {
+      title: "Plan your next focused sprint",
+      description:
+        "Move into the Workspace with snippets, todos, and multi-file layouts designed for rapid rehearsal.",
+      icon: Rocket,
+      accent: "from-emerald-500/25 via-teal-500/20 to-cyan-500/25",
+      destination: "/workspace",
+      cta: "Open workspace",
+    },
+    {
+      title: "Automate your learning loops",
+      description:
+        "Create snippet libraries and leverage semantic tags so you can recall solutions faster each session.",
+      icon: Zap,
+      accent: "from-amber-500/25 via-orange-500/20 to-rose-500/20",
+      destination: "/snippets",
+      cta: "Review snippets",
+    },
+  ];
 
   // Fetch user profile
   const { data: userProfile } = useQuery<any>({
@@ -336,6 +370,69 @@ export default function Profile() {
           Manage your account and connected platforms
         </p>
       </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.3 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-background/95 via-background/80 to-background/95 p-6 shadow-[0_25px_80px_-50px_rgba(124,58,237,0.45)]"
+      >
+        <div className="absolute -right-24 top-1/3 h-40 w-40 rounded-full bg-purple-500/20 blur-3xl" />
+        <div className="absolute left-16 -top-24 h-32 w-48 -rotate-6 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="relative z-10 grid gap-6 md:grid-cols-[1fr,1.4fr] md:items-center">
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-primary/10 px-4 py-1 text-xs uppercase tracking-[0.3em] text-primary">
+              <Sparkles className="h-3 w-3" />
+              Guided Workflows
+            </div>
+            <h2 className="text-2xl font-semibold leading-tight">
+              Pair your profile insights with action-ready routines.
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Start with the usage guide to understand the practice loop, then jump straight into the workspace
+              or snippets library to apply what you learn.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {highlightCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <motion.button
+                  key={card.title}
+                  type="button"
+                  onClick={() => setLocation(card.destination)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-5 text-left transition-colors hover:border-primary/40 hover:bg-card"
+                >
+                  <div className={`pointer-events-none absolute inset-0 -z-10 opacity-0 transition-opacity duration-500 group-hover:opacity-100 bg-gradient-to-br ${card.accent}`} />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl border border-border/60 bg-background/80 p-2">
+                        <Icon className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold leading-snug">{card.title}</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">{card.description}</p>
+                      </div>
+                    </div>
+                    {card.badge && (
+                      <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
+                        {card.badge}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-4 flex items-center gap-2 text-sm font-medium text-primary">
+                    {card.cta}
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-6 lg:col-span-1">

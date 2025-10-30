@@ -1,4 +1,4 @@
-import { User, Settings, LogOut, Trophy, Code2, Target } from "lucide-react";
+import { User, Settings, LogOut, Trophy, Code2, Target, Sparkles } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -122,6 +122,14 @@ export function ProfilePopover() {
             >
               <User className="h-4 w-4" />
               View Profile
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-2 hover:bg-amber-500/10"
+              onClick={() => setLocation("/guide")}
+            >
+              <Sparkles className="h-4 w-4" />
+              Usage Playbook
             </Button>
             <Button
               variant="ghost"
