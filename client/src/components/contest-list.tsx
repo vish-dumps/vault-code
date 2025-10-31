@@ -33,6 +33,7 @@ export function ContestList({ contests, isLoading = false, isError = false, onRe
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/todos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/gamification"] });
       toast({
         title: "Reminder Set!",
         description: "Contest reminder added to your TODO list",

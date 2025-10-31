@@ -28,6 +28,7 @@ export default function AddQuestion() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/gamification"] });
       queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
       setLocation("/questions");
     },

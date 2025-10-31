@@ -1,0 +1,7 @@
+from pathlib import Path
+text=Path('client/src/pages/dashboard.tsx').read_text()
+start=text.find('const idx = solvedDate')
+stop=text.find('counts[idx] += 1;', start)+len('counts[idx] += 1;')
+block=text[start:stop]
+print(block)
+

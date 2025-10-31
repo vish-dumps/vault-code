@@ -4,6 +4,7 @@ import { User as UserModel } from './models/User';
 import { generateToken, authenticateToken, AuthRequest } from './auth';
 import { z } from 'zod';
 import { sendOtpEmail } from './services/email';
+import { XP_REWARDS, getBadgeForXp } from '@shared/gamification';
 
 const router = Router();
 const OTP_LENGTH = parseInt(process.env.OTP_LENGTH || '6', 10);
@@ -147,11 +148,16 @@ router.post('/register/verify', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid verification code' });
     }
 
+    const newXp = Math.max(0, (user.xp ?? 0) + XP_REWARDS.registrationBonus);
+    const badgeTier = getBadgeForXp(newXp);
+
     user.set({
       otpCodeHash: undefined,
       otpExpiresAt: undefined,
       otpSession: undefined,
       otpVerifiedAt: new Date(),
+      xp: newXp,
+      badge: badgeTier.name,
     });
     await user.save();
 
@@ -184,6 +190,8 @@ router.post('/register/verify', async (req: Request, res: Response) => {
         lastActiveDate: user.lastActiveDate,
         lastResetDate: user.lastResetDate,
         createdAt: user.createdAt,
+        xp: user.xp ?? 0,
+        badge: user.badge ?? badgeTier.name,
       }
     });
   } catch (error) {
@@ -378,6 +386,8 @@ router.post('/login/verify', async (req: Request, res: Response) => {
         lastActiveDate: user.lastActiveDate,
         lastResetDate: user.lastResetDate,
         createdAt: user.createdAt,
+        xp: user.xp ?? 0,
+        badge: user.badge ?? getBadgeForXp(user.xp ?? 0).name,
       }
     });
   } catch (error) {
@@ -421,6 +431,8 @@ router.get('/verify', authenticateToken, async (req: AuthRequest, res: Response)
         lastActiveDate: user.lastActiveDate,
         lastResetDate: user.lastResetDate,
         createdAt: user.createdAt,
+        xp: user.xp ?? 0,
+        badge: user.badge ?? getBadgeForXp(user.xp ?? 0).name,
       }
     });
   } catch (error) {

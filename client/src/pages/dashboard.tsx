@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -57,6 +57,11 @@ export default function Dashboard() {
     refetchInterval: 30000,
   });
 
+  const { data: solvedAuto = [] } = useQuery<QuestionWithDetails[]>({
+    queryKey: ["/api/user/solved?limit=200"],
+    refetchInterval: 60000,
+  });
+
   // Fetch contests
   const {
     data: contests = [],
@@ -92,6 +97,11 @@ export default function Dashboard() {
     refetchInterval: 60000,
   });
 
+  const invalidateGamification = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["/api/user/gamification"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
+  }, []);
+
   // Update goal mutation
   const updateGoalMutation = useMutation({
     mutationFn: async (data: { streakGoal?: number; dailyGoal?: number }) => {
@@ -99,7 +109,7 @@ export default function Dashboard() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
+      invalidateGamification();
       toast({ title: "Success", description: "Goal updated successfully" });
     },
   });
@@ -126,6 +136,7 @@ export default function Dashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/todos"] });
       setNewTodoTitle("");
+      invalidateGamification();
       toast({ title: "Success", description: "Todo added successfully" });
     },
     onError: () => {
@@ -141,6 +152,7 @@ export default function Dashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/todos"] });
+      invalidateGamification();
     },
   });
 
@@ -151,6 +163,7 @@ export default function Dashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/todos"] });
+      invalidateGamification();
       toast({ title: "Success", description: "Todo deleted successfully" });
     },
   });
@@ -174,6 +187,7 @@ export default function Dashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/todos"] });
+      invalidateGamification();
       toast({ title: "Success", description: "Task retention updated" });
     },
   });
@@ -329,20 +343,28 @@ export default function Dashboard() {
     })();
 
     const counts = Array(7).fill(0) as number[]; // Mon..Sun
-    for (const q of questions) {
-      const saved = q.dateSaved ? new Date(q.dateSaved as unknown as string) : undefined;
-      if (!saved) continue;
-      const day = new Date(saved);
-      const dayMid = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-      if (dayMid >= startOfWeek) {
-        const idx = (day.getDay() === 0 ? 6 : day.getDay() - 1); // Mon=0..Sun=6
-        counts[idx] += 1;
-      }
+    const seen = new Set<string>();
+    const combinedEntries = [...questions, ...solvedAuto];
+
+    for (const entry of combinedEntries) {
+      const sourceDate = (entry as any).solvedAt ?? entry.dateSaved;
+      if (!sourceDate) continue;
+      const solvedDate = sourceDate instanceof Date ? sourceDate : new Date(sourceDate as any);
+      if (Number.isNaN(solvedDate.getTime())) continue;
+      const dayFloor = new Date(solvedDate.getFullYear(), solvedDate.getMonth(), solvedDate.getDate());
+      if (dayFloor < startOfWeek) continue;
+      const idx = solvedDate.getDay() === 0 ? 6 : solvedDate.getDay() - 1;
+      const titleSeed = (entry.title ?? "").toString().trim() || "untitled";
+      const idSeed = (entry as any).problemId ?? entry.id ?? `${titleSeed}-${idx}`;
+      const key = `${idSeed}-${dayFloor.getTime()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      counts[idx] += 1;
     }
 
     const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return labels.map((label, i) => ({ day: label, problems: counts[i] }));
-  }, [questions]);
+  }, [questions, solvedAuto]);
   const motivationalQuotes = [
     "The only way to do great work is to love what you do.",
     "Code is like humor. When you have to explain it, it's bad.",

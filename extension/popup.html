@@ -5,11 +5,31 @@
     <title>CodeVault Smart Saver</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
-  <body>
+  <body class="theme-dark">
     <main class="container">
       <header class="heading">
-        <h1>CodeVault Saver</h1>
-        <p class="subtitle">Capture and sync competitive programming progress instantly.</p>
+        <div class="heading__top">
+          <div>
+            <h1>CodeVault Saver</h1>
+            <p class="subtitle">Capture and sync competitive programming progress instantly.</p>
+          </div>
+          <div class="heading__actions">
+            <button id="theme-toggle" class="icon-button" aria-label="Toggle theme">
+              <span class="icon-sun" aria-hidden="true"></span>
+              <span class="icon-moon" aria-hidden="true"></span>
+            </button>
+            <label class="micro-toggle">
+              <input id="auto-track-toggle" type="checkbox" />
+              <span class="micro-toggle__track">
+                <span class="micro-toggle__thumb"></span>
+              </span>
+              <span class="micro-toggle__label">Auto Track</span>
+            </label>
+          </div>
+        </div>
+        <p id="auto-track-status" class="micro-copy">
+          Sign in to enable auto tracking.
+        </p>
       </header>
 
       <section id="status-banner" class="banner hidden"></section>

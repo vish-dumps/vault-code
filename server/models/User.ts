@@ -15,17 +15,23 @@ export interface IUser extends Document {
   streakGoal?: number;
   dailyGoal?: number;
   dailyProgress?: number;
+  xp: number;
+  badge: string;
   lastActiveDate?: Date;
   lastResetDate?: Date;
   avatarType?: 'initials' | 'random' | 'custom';
   avatarGender?: 'male' | 'female';
   customAvatarUrl?: string;
   randomAvatarSeed?: number;
+  lastGoalAwardDate?: Date;
+  lastPenaltyDate?: Date;
   createdAt: Date;
   otpCodeHash?: string;
   otpExpiresAt?: Date;
   otpSession?: string;
   otpVerifiedAt?: Date;
+  lastSolveAt?: Date;
+  solveComboCount?: number;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -108,6 +114,28 @@ const UserSchema = new Schema<IUser>({
   },
   randomAvatarSeed: {
     type: Number
+  },
+  xp: {
+    type: Number,
+    default: 0
+  },
+  badge: {
+    type: String,
+    default: 'Novice',
+    trim: true
+  },
+  lastSolveAt: {
+    type: Date
+  },
+  solveComboCount: {
+    type: Number,
+    default: 0
+  },
+  lastGoalAwardDate: {
+    type: Date
+  },
+  lastPenaltyDate: {
+    type: Date
   },
   otpCodeHash: {
     type: String,

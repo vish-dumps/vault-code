@@ -22,6 +22,12 @@ export const users = pgTable("users", {
   avatarGender: text("avatar_gender").default('male'),
   customAvatarUrl: text("custom_avatar_url"),
   randomAvatarSeed: integer("random_avatar_seed"),
+  xp: integer("xp").default(0),
+  badge: text("badge").default('Novice'),
+  lastSolveAt: timestamp("last_solve_at"),
+  solveComboCount: integer("solve_combo_count").default(0),
+  lastGoalAwardDate: timestamp("last_goal_award_date"),
+  lastPenaltyDate: timestamp("last_penalty_date"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -33,6 +39,10 @@ export const questions = pgTable("questions", {
   link: text("link"),
   difficulty: text("difficulty").notNull(), // Easy, Medium, Hard
   notes: text("notes"),
+  source: text("source").default('manual'),
+  problemId: text("problem_id"),
+  solvedAt: timestamp("solved_at"),
+  xpAwarded: integer("xp_awarded").default(0),
   dateSaved: timestamp("date_saved").defaultNow(),
 });
 
@@ -89,6 +99,10 @@ export const insertQuestionSchema = createInsertSchema(questions).omit({
     code: z.string(),
     notes: z.string().optional(),
   })).optional(),
+  source: z.enum(["manual", "auto"]).optional(),
+  problemId: z.string().min(1).optional(),
+  solvedAt: z.coerce.date().optional(),
+  xpAwarded: z.number().int().optional(),
 });
 
 export const insertApproachSchema = createInsertSchema(approaches).omit({

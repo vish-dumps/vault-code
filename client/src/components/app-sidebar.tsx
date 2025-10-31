@@ -1,4 +1,4 @@
-import { Home, BookOpen, Code2, Trophy, User, LogOut } from "lucide-react";
+import { Home, BookOpen, Code2, Trophy, User, LogOut, CheckCircle2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -25,6 +25,11 @@ const menuItems = [
     title: "Questions",
     url: "/questions",
     icon: BookOpen,
+  },
+  {
+    title: "Solved",
+    url: "/solved",
+    icon: CheckCircle2,
   },
   {
     title: "Snippets",

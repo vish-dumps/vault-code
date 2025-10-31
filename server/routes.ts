@@ -8,9 +8,19 @@ import {
   updateApproachSchema,
   insertSnippetSchema,
 } from "@shared/schema";
+import type { User } from "@shared/schema";
 import { z } from "zod";
 import { authenticateToken, getUserId, AuthRequest } from "./auth";
 import { Todo } from "./models/Todo";
+import {
+  XP_REWARDS,
+  XP_COMBO_RULES,
+  getBadgeForXp,
+  getNextBadge,
+  getSolvedProblemXp,
+  applyProgressiveScaling,
+  calculateComboBonus
+} from "@shared/gamification";
 
 interface ContestResponse {
   id: string;
@@ -61,6 +71,151 @@ const FALLBACK_CONTESTS: ContestResponse[] = [
     url: "https://codeforces.com",
   },
 ];
+
+const FETCH_TIMEOUT_MS = 7000;
+const PROBLEM_SOURCE_MANUAL = "manual";
+const PROBLEM_SOURCE_AUTO = "auto";
+
+const solvedProblemPayloadSchema = z.object({
+  userId: z.string().optional(),
+  platform: z.string().min(1),
+  title: z.string().min(1),
+  difficulty: z.union([z.string(), z.number()]),
+  tags: z.array(z.string()).optional(),
+  link: z.string().optional(),
+  problemId: z.string().min(1),
+  solvedAt: z.union([z.string(), z.date(), z.number()]).optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isSameDay(date: Date | null | undefined, reference: Date): boolean {
+  if (!date) return false;
+  return (
+    date.getFullYear() === reference.getFullYear() &&
+    date.getMonth() === reference.getMonth() &&
+    date.getDate() === reference.getDate()
+  );
+}
+
+function normalizeSolvedDifficulty(value: unknown): "Easy" | "Medium" | "Hard" {
+  if (value === null || value === undefined) return "Medium";
+
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    return ratingToDifficulty(value);
+  }
+
+  const text = value.toString().trim().toLowerCase();
+  if (text === "easy" || text === "medium" || text === "hard") {
+    return text === "easy" ? "Easy" : text === "hard" ? "Hard" : "Medium";
+  }
+
+  const rating = Number.parseInt(text, 10);
+  if (!Number.isNaN(rating)) {
+    return ratingToDifficulty(rating);
+  }
+
+  return "Medium";
+}
+
+function ratingToDifficulty(rating: number): "Easy" | "Medium" | "Hard" {
+  if (rating < 1200) return "Easy";
+  if (rating < 1700) return "Medium";
+  return "Hard";
+}
+
+function normalizePlatformName(platform: string | null | undefined, link?: string | null): string {
+  if (platform) {
+    const normalized = platform.toString().toLowerCase();
+    if (normalized.includes("leetcode")) return "LeetCode";
+    if (normalized.includes("codeforces")) return "CodeForces";
+    if (normalized.includes("codechef")) return "CodeChef";
+    if (normalized.includes("atcoder")) return "AtCoder";
+    if (normalized.includes("hackerrank")) return "HackerRank";
+  }
+
+  const inferred = inferPlatformFromLink(link);
+  if (inferred) return inferred;
+  return "Other";
+}
+
+function inferPlatformFromLink(link?: string | null): string | null {
+  if (!link) return null;
+  try {
+    const url = new URL(link);
+    const host = url.hostname.toLowerCase();
+    if (host.includes("leetcode")) return "LeetCode";
+    if (host.includes("codeforces")) return "CodeForces";
+    if (host.includes("codechef")) return "CodeChef";
+    if (host.includes("atcoder")) return "AtCoder";
+    if (host.includes("hackerrank")) return "HackerRank";
+  } catch {
+    // Ignore malformed URLs.
+  }
+  return null;
+}
+
+function sanitizeTagList(tags?: string[]): string[] {
+  if (!Array.isArray(tags)) return [];
+  const cleaned = tags
+    .map((tag) => (typeof tag === "string" ? tag.trim() : ""))
+    .filter((tag) => tag.length > 0);
+  return Array.from(new Set(cleaned));
+}
+
+function parseSolvedAtValue(input: unknown): Date {
+  if (input instanceof Date) {
+    return Number.isNaN(input.getTime()) ? new Date() : input;
+  }
+
+  if (typeof input === "number") {
+    const date = new Date(input);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+
+  if (typeof input === "string") {
+    const date = new Date(input);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+
+  return new Date();
+}
+
+function normalizeLink(link?: string | null): string | undefined {
+  if (!link) return undefined;
+  const trimmed = link.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+async function applyXp(
+  userId: string,
+  delta: number,
+  meta: Partial<User> = {},
+  baseUser?: User | null
+): Promise<User | undefined> {
+  const user = baseUser ?? (await mongoStorage.getUser(userId));
+  if (!user) return undefined;
+
+  const currentXp = user.xp ?? 0;
+  const nextXp = Math.max(0, currentXp + delta);
+  const badgeTier = getBadgeForXp(nextXp);
+
+  return mongoStorage.updateUser(userId, {
+    xp: nextXp,
+    badge: badgeTier.name,
+    ...meta,
+  });
+}
 
 // Helper function to update streak on activity
 async function updateStreakOnActivity(userId: string): Promise<void> {
@@ -142,19 +297,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = getUserId(req);
       const data = insertQuestionSchema.parse(req.body);
-      const question = await mongoStorage.createQuestion(data, userId);
-      
+      const createPayload = {
+        ...data,
+        source: data.source ?? PROBLEM_SOURCE_MANUAL,
+        xpAwarded: data.xpAwarded ?? XP_REWARDS.manual.addQuestionToVault,
+        solvedAt: data.solvedAt ?? new Date(),
+      };
+      const question = await mongoStorage.createQuestion(createPayload, userId);
+
       // Update streak on question add
       await updateStreakOnActivity(userId);
-      
-      // Increment daily progress
-      const user = await mongoStorage.getUser(userId);
-      if (user) {
-        await mongoStorage.updateUser(userId, {
-          dailyProgress: (user.dailyProgress || 0) + 1
-        });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const userBeforeUpdate = await mongoStorage.getUser(userId);
+      const previousProgress = userBeforeUpdate?.dailyProgress ?? 0;
+      let updatedProfile = userBeforeUpdate;
+
+      if (userBeforeUpdate) {
+        updatedProfile =
+          (await mongoStorage.updateUser(userId, {
+            dailyProgress: (userBeforeUpdate.dailyProgress || 0) + 1,
+          })) ?? userBeforeUpdate;
       }
-      
+
+      updatedProfile =
+        (await applyXp(userId, XP_REWARDS.manual.addQuestionToVault, {}, updatedProfile)) ??
+        updatedProfile;
+
+      if (updatedProfile) {
+        const goal = updatedProfile.dailyGoal ?? 0;
+        const progress = updatedProfile.dailyProgress ?? 0;
+        const lastGoalAwardDate = updatedProfile.lastGoalAwardDate
+          ? new Date(updatedProfile.lastGoalAwardDate)
+          : null;
+
+        if (
+          goal > 0 &&
+          previousProgress < goal &&
+          progress >= goal &&
+          !isSameDay(lastGoalAwardDate, today)
+        ) {
+          updatedProfile =
+            (await applyXp(
+              userId,
+              XP_REWARDS.dailyGoalBonus,
+              { lastGoalAwardDate: new Date() },
+              updatedProfile
+            )) ?? updatedProfile;
+        }
+      }
+
       res.status(201).json(question);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -162,6 +356,157 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Error creating question:", error);
       res.status(500).json({ error: "Failed to create question" });
+    }
+  });
+
+  app.get("/api/user/solved", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const limitParam = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit;
+      const limit = limitParam ? Number.parseInt(String(limitParam), 10) : 50;
+      const resolvedLimit = Number.isNaN(limit) ? 50 : Math.max(1, Math.min(limit, 200));
+
+      const solved = await mongoStorage.getSolvedQuestions(userId, resolvedLimit);
+      res.json(solved);
+    } catch (error) {
+      console.error("Error fetching solved questions:", error);
+      res.status(500).json({ error: "Failed to fetch solved questions" });
+    }
+  });
+
+  app.post("/api/user/solved", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const payload = solvedProblemPayloadSchema.parse(req.body);
+
+      if (payload.userId && payload.userId !== userId) {
+        return res.status(403).json({ error: "User mismatch" });
+      }
+
+      const normalizedProblemId = payload.problemId.toLowerCase();
+      const link = normalizeLink(payload.link);
+      const platform = normalizePlatformName(payload.platform, link);
+      const difficulty = normalizeSolvedDifficulty(payload.difficulty);
+      const tags = sanitizeTagList(payload.tags);
+      const solvedAt = parseSolvedAtValue(payload.solvedAt);
+
+      const existing = await mongoStorage.getQuestionByProblemId(userId, normalizedProblemId);
+      if (existing) {
+        return res.json({
+          duplicate: true,
+          question: existing,
+          xpAwarded: existing.xpAwarded ?? 0,
+        });
+      }
+
+      const userBeforeUpdate = await mongoStorage.getUser(userId);
+      const baseXp = getSolvedProblemXp(difficulty);
+      const progressive = applyProgressiveScaling(baseXp, userBeforeUpdate?.xp ?? 0);
+      const progressiveXp = progressive.adjustedXp;
+
+      const lastSolveAt =
+        userBeforeUpdate?.lastSolveAt instanceof Date
+          ? userBeforeUpdate.lastSolveAt
+          : userBeforeUpdate?.lastSolveAt
+          ? new Date(userBeforeUpdate.lastSolveAt)
+          : null;
+      const previousComboCount = userBeforeUpdate?.solveComboCount ?? 0;
+      const comboWindowMs = XP_COMBO_RULES.windowMinutes * 60 * 1000;
+      let comboCount = 1;
+
+      if (lastSolveAt) {
+        const delta = Math.abs(solvedAt.getTime() - new Date(lastSolveAt).getTime());
+        if (delta <= comboWindowMs) {
+          comboCount = previousComboCount + 1;
+        }
+      }
+
+      const combo = calculateComboBonus(progressiveXp, comboCount);
+      const totalXpAward = progressiveXp + combo.bonusXp;
+
+      const createPayload = {
+        title: payload.title,
+        platform,
+        link,
+        difficulty,
+        notes: "",
+        tags,
+        source: PROBLEM_SOURCE_AUTO,
+        problemId: normalizedProblemId,
+        solvedAt,
+        xpAwarded: totalXpAward,
+        approaches: [],
+      };
+
+      const question = await mongoStorage.createQuestion(createPayload, userId);
+
+      await updateStreakOnActivity(userId);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const previousProgress = userBeforeUpdate?.dailyProgress ?? 0;
+      let updatedProfile = userBeforeUpdate;
+
+      if (userBeforeUpdate) {
+        updatedProfile =
+          (await mongoStorage.updateUser(userId, {
+            dailyProgress: (userBeforeUpdate.dailyProgress || 0) + 1,
+          })) ?? userBeforeUpdate;
+      }
+
+      let goalBonusAwarded = 0;
+
+      updatedProfile =
+        (await applyXp(
+          userId,
+          totalXpAward,
+          { lastSolveAt: solvedAt, solveComboCount: comboCount },
+          updatedProfile
+        )) ?? updatedProfile;
+
+      if (updatedProfile) {
+        const goal = updatedProfile.dailyGoal ?? 0;
+        const progress = updatedProfile.dailyProgress ?? 0;
+        const lastGoalAwardDate = updatedProfile.lastGoalAwardDate
+          ? new Date(updatedProfile.lastGoalAwardDate)
+          : null;
+
+        if (
+          goal > 0 &&
+          previousProgress < goal &&
+          progress >= goal &&
+          !isSameDay(lastGoalAwardDate, today)
+        ) {
+          updatedProfile =
+            (await applyXp(
+              userId,
+              XP_REWARDS.dailyGoalBonus,
+              { lastGoalAwardDate: new Date() },
+              updatedProfile
+            )) ?? updatedProfile;
+          goalBonusAwarded = XP_REWARDS.dailyGoalBonus;
+        }
+      }
+
+      res.status(201).json({
+        duplicate: false,
+        question,
+        xpAwarded: totalXpAward,
+        goalBonusAwarded,
+        combo: {
+          count: comboCount,
+          bonusXp: combo.bonusXp
+        },
+        progressionMultiplier: progressive.multiplier,
+        comboMultiplier: combo.multiplier
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      console.error("Error logging solved problem:", error);
+      res.status(500).json({ error: "Failed to log solved problem" });
     }
   });
 
@@ -268,7 +613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(cachedContests);
       }
 
-      const upstreamResponse = await fetch("https://kontests.net/api/v1/all");
+      const upstreamResponse = await fetchWithTimeout("https://kontests.net/api/v1/all");
       if (!upstreamResponse.ok) {
         throw new Error(`Upstream contests API returned ${upstreamResponse.status}`);
       }
@@ -323,14 +668,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       contestsCacheTimestamp = Date.now();
 
       res.json(cachedContests);
-    } catch (error) {
-      console.error("Error fetching contests:", error);
-      if (cachedContests.length) {
-        return res.json(cachedContests);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isAbortError =
+          error instanceof Error &&
+          (error.name === "AbortError" || errorMessage.toLowerCase().includes("aborted"));
+        console.warn(
+          `Error fetching contests${isAbortError ? " (timeout)" : ""}:`,
+          errorMessage
+        );
+
+        const fallback = cachedContests.length ? cachedContests : FALLBACK_CONTESTS;
+        cachedContests = fallback;
+        contestsCacheTimestamp = Date.now();
+        res.json(fallback);
       }
-      res.json(FALLBACK_CONTESTS);
-    }
-  });
+    });
 
   // User profile routes
   app.get("/api/user/profile", async (req: AuthRequest, res) => {
@@ -355,7 +708,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!lastReset || lastReset.getTime() < today.getTime()) {
         user = await mongoStorage.updateUser(userId, {
           dailyProgress: 0,
-          lastResetDate: new Date()
+          lastResetDate: new Date(),
+          lastPenaltyDate: null,
         });
       }
       
@@ -363,6 +717,158 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user profile:", error);
       res.status(500).json({ error: "Failed to fetch profile" });
+    }
+  });
+
+  app.get("/api/user/gamification", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await mongoStorage.getUser(userId);
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const todos = await Todo.find({ userId });
+      const completedToday = todos.filter((todo) => {
+        if (!todo.completed || !todo.completedAt) return false;
+        const completedAt = new Date(todo.completedAt);
+        completedAt.setHours(0, 0, 0, 0);
+        return completedAt.getTime() === today.getTime();
+      }).length;
+      const outstandingTodos = todos.filter((todo) => !todo.completed).length;
+
+      const dailyProgress = user.dailyProgress ?? 0;
+      const dailyGoal = user.dailyGoal ?? 0;
+      const questionsSolvedToday = dailyProgress;
+      const goalAchievedToday =
+        user.lastGoalAwardDate ? isSameDay(new Date(user.lastGoalAwardDate), today) : false;
+
+      const xp = user.xp ?? 0;
+      const badgeTier = getBadgeForXp(xp);
+      const nextBadge = getNextBadge(xp);
+      const xpToNext = nextBadge ? Math.max(0, nextBadge.minXp - xp) : 0;
+      const progressToNext =
+        nextBadge && nextBadge.minXp !== badgeTier.minXp
+          ? Math.min(1, Math.max(0, (xp - badgeTier.minXp) / (nextBadge.minXp - badgeTier.minXp)))
+          : 1;
+
+      const questionXp = questionsSolvedToday * XP_REWARDS.manual.addQuestionToVault;
+      const todoXp = completedToday * XP_REWARDS.manual.completeTodoTask;
+      const goalBonusXp = goalAchievedToday ? XP_REWARDS.dailyGoalBonus : 0;
+      const positiveTotal = questionXp + todoXp + goalBonusXp;
+
+      const projectedMissedGoalPenalty =
+        dailyGoal > 0 && dailyProgress < dailyGoal ? XP_REWARDS.missedDailyGoal : 0;
+      const projectedTodoPenalty = outstandingTodos * XP_REWARDS.unfinishedTodoPenalty;
+      const projectedNegative = projectedMissedGoalPenalty + projectedTodoPenalty;
+
+      const lastPenaltyDate = user.lastPenaltyDate ? new Date(user.lastPenaltyDate) : null;
+      const penaltyAppliedToday = lastPenaltyDate ? isSameDay(lastPenaltyDate, today) : false;
+
+      const suggestions: string[] = [];
+      if (dailyGoal > 0 && dailyProgress < dailyGoal) {
+        const remaining = dailyGoal - dailyProgress;
+        suggestions.push(
+          `Solve ${remaining} more ${remaining === 1 ? "problem" : "problems"} to secure +${
+            XP_REWARDS.dailyGoalBonus
+          } XP.`
+        );
+      } else if (!goalAchievedToday && dailyGoal > 0) {
+        suggestions.push(
+          `Lock in today's goal to collect the +${XP_REWARDS.dailyGoalBonus} XP streak bonus.`
+        );
+      }
+      if (outstandingTodos > 0) {
+        suggestions.push(
+          `Clear ${outstandingTodos} open ${outstandingTodos === 1 ? "task" : "tasks"} to avoid ${Math.abs(
+            XP_REWARDS.unfinishedTodoPenalty * outstandingTodos
+          )} XP in penalties.`
+        );
+      }
+      if (nextBadge) {
+        suggestions.push(
+          `Earn ${xpToNext} XP to reach the ${nextBadge.name} badge.`
+        );
+      }
+
+      res.json({
+        xp,
+        badgeTier,
+        nextBadge,
+        xpToNext,
+        progressToNext,
+        summary: {
+          dailyProgress,
+          dailyGoal,
+          goalAchievedToday,
+          questionsSolvedToday,
+          todosCompletedToday: completedToday,
+          streak: user.streak ?? 0,
+        },
+        breakdown: {
+          positives: [
+            {
+              id: "questions",
+              label: "Problems solved today",
+              count: questionsSolvedToday,
+              xpPer: XP_REWARDS.manual.addQuestionToVault,
+              total: questionXp,
+              active: questionXp !== 0,
+            },
+            {
+              id: "todos",
+              label: "Todos completed today",
+              count: completedToday,
+              xpPer: XP_REWARDS.manual.completeTodoTask,
+              total: todoXp,
+              active: todoXp !== 0,
+            },
+            {
+              id: "dailyGoal",
+              label: "Daily goal bonus",
+              count: goalAchievedToday ? 1 : 0,
+              xpPer: XP_REWARDS.dailyGoalBonus,
+              total: goalBonusXp,
+              active: goalAchievedToday,
+            },
+          ],
+          negatives: [
+            {
+              id: "missedGoal",
+              label: "Risk: Missed daily goal",
+              count: dailyGoal > 0 ? Math.max(dailyGoal - dailyProgress, 0) : 0,
+              xpPer: XP_REWARDS.missedDailyGoal,
+              total: projectedMissedGoalPenalty,
+              active: projectedMissedGoalPenalty !== 0,
+              projected: true,
+            },
+            {
+              id: "unfinishedTodos",
+              label: "Risk: Unfinished tasks",
+              count: outstandingTodos,
+              xpPer: XP_REWARDS.unfinishedTodoPenalty,
+              total: projectedTodoPenalty,
+              active: projectedTodoPenalty !== 0,
+              projected: true,
+            },
+          ],
+        },
+        outstandingTodos,
+        projectedPenalty: projectedNegative,
+        penaltyAppliedToday,
+        totals: {
+          positiveToday: positiveTotal,
+          projectedNegative,
+        },
+        suggestions,
+      });
+    } catch (error) {
+      console.error("Error building gamification summary:", error);
+      res.status(500).json({ error: "Failed to load gamification summary" });
     }
   });
 
@@ -510,6 +1016,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { completed, retainUntil } = req.body;
 
+      const existingTodo = await Todo.findOne({ _id: id, userId });
+      if (!existingTodo) {
+        return res.status(404).json({ error: "Todo not found" });
+      }
+
       const updateData: any = {};
       if (completed !== undefined) {
         updateData.completed = completed;
@@ -527,6 +1038,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!todo) {
         return res.status(404).json({ error: "Todo not found" });
+      }
+
+      if (completed === true && !existingTodo.completed) {
+        await applyXp(userId, XP_REWARDS.manual.completeTodoTask);
       }
 
       res.json({

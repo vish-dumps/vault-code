@@ -23,7 +23,6 @@ import Profile from "@/pages/profile";
 import Guide from "@/pages/guide";
 import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
-import RecentSolved from "@/pages/recent-solved";
 
 function AuthenticatedRoutes() {
   return (
@@ -34,7 +33,6 @@ function AuthenticatedRoutes() {
       <Route path="/questions" component={Questions} />
       <Route path="/questions/add" component={AddQuestion} />
       <Route path="/questions/:id" component={QuestionDetails} />
-      <Route path="/solved" component={RecentSolved} />
       <Route path="/contests" component={Contests} />
       <Route path="/profile" component={Profile} />
       <Route path="/guide" component={Guide} />
@@ -80,8 +78,7 @@ function AppContent() {
         <div className="flex flex-1 flex-col overflow-hidden">
           <header className="flex h-14 items-center justify-between border-b px-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <div className="flex items-center gap-2">
-              <XpPill />
+            <div className="flex items-center gap-1">
               <NotificationPopover />
               <StreakPopover />
               <ThemeToggle />

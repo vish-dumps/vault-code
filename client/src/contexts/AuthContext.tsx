@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { apiRequest } from '@/lib/queryClient';
+import { getBadgeForXp } from '@shared/gamification';
 
 type AvatarType = 'initials' | 'random' | 'custom';
 type AvatarGender = 'male' | 'female';
@@ -19,7 +20,12 @@ interface User {
   customAvatarUrl?: string | null;
   randomAvatarSeed?: number | null;
   avatarUrl?: string | null;
+  xp: number;
+  badge?: string;
+  lastSolveAt?: string | null;
+  solveComboCount?: number;
 }
+
 
 type LoginResult =
   | {
@@ -85,8 +91,12 @@ function computeAvatarUrl(data: Partial<User> | null | undefined): string | null
 }
 
 function mapUser(data: any): User {
+  const xp = typeof data?.xp === 'number' ? data.xp : 0;
+  const badge = getBadgeForXp(xp).name;
   return {
     ...data,
+    xp,
+    badge,
     avatarUrl: computeAvatarUrl(data),
   };
 }

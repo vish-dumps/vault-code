@@ -1,5 +1,10 @@
 ﻿const DEFAULT_API_BASE = "https://your-codevault-api.com";
 
+const RECENT_SOLVED_LIMIT = 5;
+const THEME_STORAGE_KEY = "popupTheme";
+const THEME_DARK = "dark";
+const THEME_LIGHT = "light";
+
 const elements = {
   title: document.getElementById("problem-title"),
   platform: document.getElementById("platform"),
@@ -34,7 +39,11 @@ const elements = {
   openAppButton: document.getElementById("open-app"),
   userName: document.getElementById("user-name"),
   userEmail: document.getElementById("user-email"),
-  userAvatar: document.getElementById("user-avatar")
+  userAvatar: document.getElementById("user-avatar"),
+  themeToggle: document.getElementById("theme-toggle"),
+  autoTrackToggle: document.getElementById("auto-track-toggle"),
+  autoTrackStatus: document.getElementById("auto-track-status"),
+  lastSolvedList: document.getElementById("last-solved-list")
 };
 
 const state = {
@@ -43,10 +52,27 @@ const state = {
   user: null,
   otpSession: null,
   lastScrapedData: null,
-  currentTabId: null
+  currentTabId: null,
+  autoTrackEnabled: true,
+  recentSolved: [],
+  theme: THEME_DARK
 };
 
 document.addEventListener("DOMContentLoaded", init);
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type !== "AUTO_TRACK_SOLVED_RECORDED" || !message.payload) {
+    return;
+  }
+
+  const entry = message.payload;
+  state.recentSolved = [
+    entry,
+    ...state.recentSolved.filter((item) => item.id !== entry.id)
+  ].slice(0, RECENT_SOLVED_LIMIT);
+
+  renderRecentSolved(state.recentSolved);
+  updateAutoTrackStatus(state.autoTrackEnabled, state.recentSolved);
+});
 
 async function init() {
   wireEventHandlers();
@@ -63,17 +89,49 @@ function wireEventHandlers() {
   elements.importFromTab?.addEventListener("click", handleImportFromTab);
   elements.logoutButton?.addEventListener("click", handleLogout);
   elements.openAppButton?.addEventListener("click", handleOpenApp);
+  elements.themeToggle?.addEventListener("click", handleThemeToggle);
   elements.difficultyOverride?.addEventListener("change", syncDifficultyUI);
+  elements.autoTrackToggle?.addEventListener("change", handleAutoTrackToggle);
 }
+
+function applyTheme(theme) {
+  const root = document.body;
+  if (!root) return;
+  root.classList.remove("theme-dark", "theme-light");
+  root.classList.add(`theme-${theme}`);
+  state.theme = theme;
+  updateThemeButton(theme);
+}
+
+function updateThemeButton(theme) {
+  if (!elements.themeToggle) return;
+  const label = theme === THEME_DARK ? "Switch to light theme" : "Switch to dark theme";
+  elements.themeToggle.setAttribute("aria-label", label);
+}
+
+function handleThemeToggle() {
+  const next = state.theme === THEME_DARK ? THEME_LIGHT : THEME_DARK;
+  applyTheme(next);
+  try {
+    chrome.storage.sync.set({ [THEME_STORAGE_KEY]: next });
+  } catch (error) {
+    console.debug("Theme preference save failed:", error);
+  }
+}
+
+
 
 async function loadSettings() {
   const stored = await chrome.storage.sync.get({
     apiBaseUrl: DEFAULT_API_BASE,
     authToken: null,
-    userProfile: null
+    userProfile: null,
+    [THEME_STORAGE_KEY]: THEME_DARK
   });
 
   state.apiBaseUrl = stored.apiBaseUrl || DEFAULT_API_BASE;
+  state.theme = stored[THEME_STORAGE_KEY] === THEME_LIGHT ? THEME_LIGHT : THEME_DARK;
+  applyTheme(state.theme);
   state.authToken = stored.authToken || null;
   state.user = stored.userProfile || null;
 
@@ -104,6 +162,14 @@ function resetAuthState() {
   elements.loginOtp.value = "";
   elements.otpContainer.classList.add("hidden");
   updateLoginButton("Sign In");
+  state.autoTrackEnabled = false;
+  state.recentSolved = [];
+  if (elements.autoTrackToggle) {
+    elements.autoTrackToggle.checked = false;
+    elements.autoTrackToggle.disabled = true;
+  }
+  renderRecentSolved([]);
+  updateAutoTrackStatus(false, [], "Sign in to enable auto tracking.");
 }
 
 async function verifyToken(token) {
@@ -157,6 +223,7 @@ function setView(view) {
 function showMainView() {
   setView("main");
   populateUserSummary();
+  syncAutoTrackControls();
   hydrateFromActiveTab();
 }
 
@@ -168,6 +235,177 @@ function populateUserSummary() {
   elements.userName.textContent = displayName;
   elements.userEmail.textContent = state.user.email || "";
   elements.userAvatar.textContent = initials;
+}
+
+async function syncAutoTrackControls() {
+  if (!elements.autoTrackToggle || !elements.autoTrackStatus) return;
+  if (!state.authToken) {
+    return;
+  }
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "GET_AUTO_TRACK_STATE"
+    });
+
+    if (!response?.success) {
+      throw new Error(response?.message || "Unable to load auto tracking.");
+    }
+
+    const data = response.data || {};
+    state.autoTrackEnabled = data.enabled !== false;
+    state.recentSolved = Array.isArray(data.recentSolved)
+      ? data.recentSolved.slice(0, RECENT_SOLVED_LIMIT)
+      : [];
+
+    updateAutoTrackToggleUI();
+    renderRecentSolved(state.recentSolved);
+    updateAutoTrackStatus(state.autoTrackEnabled, state.recentSolved);
+  } catch (error) {
+    console.debug("Auto track sync failed:", error?.message || error);
+    if (elements.autoTrackToggle) {
+      elements.autoTrackToggle.checked = false;
+      elements.autoTrackToggle.disabled = true;
+    }
+    updateAutoTrackStatus(false, [], "Auto tracking unavailable.");
+  }
+}
+
+function updateAutoTrackToggleUI() {
+  if (!elements.autoTrackToggle) return;
+  elements.autoTrackToggle.checked = !!state.autoTrackEnabled;
+  elements.autoTrackToggle.disabled = false;
+}
+
+function updateAutoTrackStatus(enabled, recentSolved, overrideMessage) {
+  if (!elements.autoTrackStatus) return;
+
+  if (overrideMessage) {
+    elements.autoTrackStatus.textContent = overrideMessage;
+    return;
+  }
+
+  if (!enabled) {
+    elements.autoTrackStatus.textContent = "Auto tracking off.";
+    return;
+  }
+
+  const latest = Array.isArray(recentSolved) ? recentSolved[0] : null;
+  const timestamp = latest?.solvedAt ? formatRelativeTime(latest.solvedAt) : "";
+  const prefix = `Auto tracking on � `;
+  elements.autoTrackStatus.textContent = timestamp
+    ? `${prefix}last recorded ${timestamp}`
+    : `${prefix}waiting for your next Accepted run.`;
+}
+
+
+async function handleAutoTrackToggle(event) {
+  const checkbox = event?.target || elements.autoTrackToggle;
+  if (!checkbox) return;
+
+  const enabled = !!checkbox.checked;
+  checkbox.disabled = true;
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "SET_AUTO_TRACK_ENABLED",
+      payload: { enabled }
+    });
+
+    if (!response?.success) {
+      throw new Error(response?.message || "Failed to update auto tracking preference.");
+    }
+
+    const data = response.data || {};
+    state.autoTrackEnabled = data.enabled !== false;
+    state.recentSolved = Array.isArray(data.recentSolved)
+      ? data.recentSolved.slice(0, RECENT_SOLVED_LIMIT)
+      : state.recentSolved;
+
+    updateAutoTrackToggleUI();
+    renderRecentSolved(state.recentSolved);
+    updateAutoTrackStatus(state.autoTrackEnabled, state.recentSolved);
+  } catch (error) {
+    console.debug("Auto track toggle error:", error?.message || error);
+    checkbox.checked = !enabled;
+    showBanner(error?.message || "Failed to update auto tracking preference.", "error");
+  } finally {
+    checkbox.disabled = false;
+  }
+}
+
+function renderRecentSolved(items) {
+  if (!elements.lastSolvedList) return;
+  elements.lastSolvedList.innerHTML = "";
+
+  const wrapper = elements.lastSolvedList.closest(".recent-solved");
+  if (wrapper) {
+    wrapper.classList.toggle("recent-solved--empty", !items || items.length === 0);
+  }
+
+  if (!items || items.length === 0) {
+    const placeholder = document.createElement("li");
+    placeholder.className = "muted";
+    placeholder.dataset.placeholder = "true";
+    placeholder.textContent = "No auto-tracked solves yet.";
+    elements.lastSolvedList.appendChild(placeholder);
+    return;
+  }
+
+  items.slice(0, RECENT_SOLVED_LIMIT).forEach((item) => {
+    const entry = document.createElement("li");
+
+    const titleNode = item.link ? document.createElement("a") : document.createElement("span");
+    titleNode.className = "last-solved-title";
+    titleNode.textContent = item.title || "Untitled Problem";
+    if (item.link) {
+      titleNode.href = item.link;
+      titleNode.target = "_blank";
+      titleNode.rel = "noopener noreferrer";
+    }
+    entry.appendChild(titleNode);
+
+    const meta = document.createElement("span");
+    meta.className = "last-solved-meta";
+
+    const left = document.createElement("span");
+    const platformLabel = normalizePlatformForUi(item.platform, item.link);
+    const chips = [
+      platformLabel,
+      item.difficulty || "Medium"
+    ];
+    if (Number.isFinite(Number(item.xpAwarded))) {
+      chips.push(`+${Number(item.xpAwarded)} XP`);
+    }
+    left.textContent = chips.filter(Boolean).join(" • ");
+
+    const right = document.createElement("span");
+    right.textContent = item.solvedAt ? formatRelativeTime(item.solvedAt) : "";
+
+    meta.appendChild(left);
+    meta.appendChild(right);
+    entry.appendChild(meta);
+
+    elements.lastSolvedList.appendChild(entry);
+  });
+}
+
+function formatRelativeTime(value) {
+  if (!value) return "";
+  try {
+    const date = value instanceof Date ? value : new Date(value);
+    const diffMs = Date.now() - date.getTime();
+    if (!Number.isFinite(diffMs)) return "";
+    if (diffMs < 60_000) return "just now";
+    const minutes = Math.floor(diffMs / 60_000);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  } catch {
+    return "";
+  }
 }
 
 async function hydrateFromActiveTab() {
@@ -692,7 +930,9 @@ function mapUser(data) {
     name: data.name,
     email: data.email,
     avatarUrl: data.avatarUrl,
-    avatarType: data.avatarType
+    avatarType: data.avatarType,
+    leetcodeUsername: data.leetcodeUsername,
+    codeforcesUsername: data.codeforcesUsername
   };
 }
 

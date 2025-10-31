@@ -31,7 +31,6 @@ export default function Profile() {
   const [codeforcesUsername, setCodeforcesUsername] = useState("");
   const [fullName, setFullName] = useState("");
   const [usernameValue, setUsernameValue] = useState("");
-  const [email, setEmail] = useState("");
   const [profileImage, setProfileImage] = useState("");
   const [avatarType, setAvatarType] = useState<'initials' | 'random' | 'custom'>('initials');
   const [avatarGender, setAvatarGender] = useState<'male' | 'female'>('male');
@@ -104,7 +103,6 @@ export default function Profile() {
       setCodeforcesUsername(userProfile.codeforcesUsername || "");
       setFullName(userProfile.name || "");
       setUsernameValue(userProfile.username || "");
-      setEmail(userProfile.email || "");
       const storedProfileImage = userProfile.profileImage || "";
       setProfileImage(storedProfileImage);
       
@@ -131,7 +129,6 @@ export default function Profile() {
         setCodeforcesUsername(updatedUser.codeforcesUsername || "");
         setFullName(updatedUser.name || "");
         setUsernameValue(updatedUser.username || "");
-        setEmail(updatedUser.email || "");
         setAvatarType(updatedUser.avatarType || "initials");
         setAvatarGender(updatedUser.avatarGender || "male");
         setCustomAvatarUrl(updatedUser.customAvatarUrl || "");
@@ -142,7 +139,7 @@ export default function Profile() {
         updateUser({
           name: updatedUser.name ?? undefined,
           username: updatedUser.username ?? usernameValue,
-          email: updatedUser.email ?? email,
+          email: updatedUser.email ?? user?.email,
           avatarType: updatedUser.avatarType ?? avatarType,
           avatarGender: updatedUser.avatarGender ?? avatarGender,
           customAvatarUrl: updatedUser.customAvatarUrl ?? null,
@@ -744,72 +741,6 @@ export default function Profile() {
               </div>
           </CardContent>
         </Card>
-
-        <Card data-testid="card-account-details">
-          <CardHeader>
-            <CardTitle>Account Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="account-full-name">Full Name</Label>
-              <Input
-                id="account-full-name"
-                placeholder="Enter your full name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                data-testid="input-account-name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="account-username">Username</Label>
-              <Input
-                id="account-username"
-                placeholder="Choose a username"
-                value={usernameValue}
-                onChange={(e) => setUsernameValue(e.target.value)}
-                minLength={3}
-                maxLength={30}
-                data-testid="input-account-username"
-              />
-              <p className="text-xs text-muted-foreground">
-                This is how you appear across CodeVault. Letters, numbers, and underscores are allowed.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="account-email">Email</Label>
-              <Input
-                id="account-email"
-                value={email}
-                disabled
-              />
-              <p className="text-xs text-muted-foreground">
-                Contact support to change your email address.
-              </p>
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setFullName(userProfile?.name || "");
-                  setUsernameValue(userProfile?.username || "");
-                }}
-                disabled={saveProfileMutation.isPending}
-              >
-                Reset
-              </Button>
-              <Button
-                type="button"
-                onClick={handleSaveAccountInfo}
-                disabled={saveProfileMutation.isPending}
-              >
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
         <Card data-testid="card-connected-accounts">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

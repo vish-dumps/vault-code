@@ -29,6 +29,8 @@ export interface IStorage {
   // Question operations
   getQuestions(userId: string): Promise<QuestionWithDetails[]>;
   getQuestion(id: string, userId: string): Promise<QuestionWithDetails | undefined>;
+  getQuestionByProblemId(userId: string, problemId: string): Promise<QuestionWithDetails | undefined>;
+  getSolvedQuestions(userId: string, limit?: number): Promise<QuestionWithDetails[]>;
   createQuestion(question: InsertQuestion, userId: string): Promise<QuestionWithDetails>;
   updateQuestion(id: string, userId: string, data: UpdateQuestion): Promise<QuestionWithDetails | undefined>;
   deleteQuestion(id: string, userId: string): Promise<boolean>;
@@ -84,7 +86,13 @@ export class MongoStorage implements IStorage {
   }
 
   async getQuestions(userId: string): Promise<QuestionWithDetails[]> {
-    const questions = await QuestionModel.find({ userId });
+    const questions = await QuestionModel.find({
+      userId,
+      $or: [
+        { source: { $exists: false } },
+        { source: { $in: [null, "", "manual"] } },
+      ],
+    });
     const questionsWithDetails: QuestionWithDetails[] = [];
 
     for (const question of questions) {
@@ -111,6 +119,43 @@ export class MongoStorage implements IStorage {
     };
   }
 
+  async getQuestionByProblemId(userId: string, problemId: string): Promise<QuestionWithDetails | undefined> {
+    if (!problemId) return undefined;
+    const question = await QuestionModel.findOne({
+      userId,
+      problemId: problemId.toLowerCase(),
+    });
+    if (!question) return undefined;
+
+    const approaches = await ApproachModel.find({ questionId: question._id });
+    return {
+      ...this.mapQuestionToSchema(question),
+      tags: question.tags,
+      approaches: approaches.map(this.mapApproachToSchema),
+    };
+  }
+
+  async getSolvedQuestions(userId: string, limit = 50): Promise<QuestionWithDetails[]> {
+    const questions = await QuestionModel.find({
+      userId,
+      source: { $in: ["auto", "auto-tracker"] },
+    })
+      .sort({ solvedAt: -1, dateSaved: -1 })
+      .limit(limit);
+
+    const results: QuestionWithDetails[] = [];
+    for (const question of questions) {
+      const approaches = await ApproachModel.find({ questionId: question._id });
+      results.push({
+        ...this.mapQuestionToSchema(question),
+        tags: question.tags,
+        approaches: approaches.map(this.mapApproachToSchema),
+      });
+    }
+
+    return results;
+  }
+
   async createQuestion(insertQuestion: InsertQuestion, userId: string): Promise<QuestionWithDetails> {
     const question = new QuestionModel({
       userId,
@@ -120,6 +165,10 @@ export class MongoStorage implements IStorage {
       difficulty: insertQuestion.difficulty,
       notes: insertQuestion.notes,
       tags: insertQuestion.tags || [],
+      source: this.normalizeSource(insertQuestion.source),
+      problemId: insertQuestion.problemId ? insertQuestion.problemId.toLowerCase() : undefined,
+      solvedAt: insertQuestion.solvedAt ?? new Date(),
+      xpAwarded: insertQuestion.xpAwarded ?? 0,
     });
 
     await question.save();
@@ -147,9 +196,27 @@ export class MongoStorage implements IStorage {
   }
 
   async updateQuestion(id: string, userId: string, data: UpdateQuestion): Promise<QuestionWithDetails | undefined> {
+    const updatePayload: Record<string, unknown> = { ...data };
+
+    if (data.problemId) {
+      updatePayload.problemId = data.problemId.toLowerCase();
+    }
+
+    if (data.source) {
+      updatePayload.source = this.normalizeSource(data.source);
+    }
+
+    if (data.solvedAt) {
+      updatePayload.solvedAt = data.solvedAt;
+    }
+
+    if (typeof data.xpAwarded === "number") {
+      updatePayload.xpAwarded = data.xpAwarded;
+    }
+
     const question = await QuestionModel.findOneAndUpdate(
       { _id: id, userId },
-      data,
+      updatePayload,
       { new: true }
     );
     
@@ -269,7 +336,13 @@ export class MongoStorage implements IStorage {
       avatarGender: (user.avatarGender as User["avatarGender"]) ?? "male",
       customAvatarUrl: user.customAvatarUrl ?? null,
       randomAvatarSeed: user.randomAvatarSeed ?? null,
+      lastSolveAt: user.lastSolveAt ?? null,
+      solveComboCount: user.solveComboCount ?? 0,
       createdAt: user.createdAt,
+      xp: user.xp ?? 0,
+      badge: user.badge ?? "Novice",
+      lastGoalAwardDate: user.lastGoalAwardDate ?? null,
+      lastPenaltyDate: user.lastPenaltyDate ?? null,
     };
   }
 
@@ -282,8 +355,17 @@ export class MongoStorage implements IStorage {
       link: question.link || null,
       difficulty: question.difficulty,
       notes: question.notes || null,
+      source: this.normalizeSource(question.source),
+      problemId: question.problemId || null,
+      solvedAt: question.solvedAt ?? question.dateSaved,
+      xpAwarded: question.xpAwarded ?? 0,
       dateSaved: question.dateSaved,
     };
+  }
+
+  private normalizeSource(value: unknown): "manual" | "auto" {
+    const normalized = typeof value === "string" ? value.toLowerCase() : "";
+    return normalized === "auto" || normalized === "auto-tracker" ? "auto" : "manual";
   }
 
   private mapApproachToSchema(approach: IApproach): Approach {

@@ -68,6 +68,8 @@ export function AddQuestionDialog({ open, onOpenChange }: AddQuestionDialogProps
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/gamification"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
       toast({
         title: "Success",
         description: "Question added successfully",

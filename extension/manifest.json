@@ -6,7 +6,9 @@
   "permissions": [
     "activeTab",
     "storage",
-    "scripting"
+    "scripting",
+    "notifications",
+    "cookies"
   ],
   "host_permissions": [
     "*://leetcode.com/*",
