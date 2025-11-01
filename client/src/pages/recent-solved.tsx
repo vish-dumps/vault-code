@@ -40,7 +40,8 @@ export default function RecentSolved() {
     const result = new Map<string, QuestionWithDetails[]>();
 
     for (const question of solvedQuestions) {
-      const solvedAt = question.solvedAt ? new Date(question.solvedAt) : new Date(question.dateSaved);
+      const solvedSource = question.solvedAt ?? question.dateSaved ?? new Date().toISOString();
+      const solvedAt = new Date(solvedSource);
       const key = solvedAt.toISOString().slice(0, 10);
       if (!result.has(key)) {
         result.set(key, []);
@@ -58,8 +59,8 @@ export default function RecentSolved() {
           day: "numeric",
         }).format(new Date(dateKey)),
         questions: questions.sort((a, b) => {
-          const aTime = new Date(a.solvedAt ?? a.dateSaved).getTime();
-          const bTime = new Date(b.solvedAt ?? b.dateSaved).getTime();
+          const aTime = new Date(a.solvedAt ?? a.dateSaved ?? new Date()).getTime();
+          const bTime = new Date(b.solvedAt ?? b.dateSaved ?? new Date()).getTime();
           return bTime - aTime;
         }),
       }));
@@ -174,3 +175,4 @@ export default function RecentSolved() {
     </div>
   );
 }
+

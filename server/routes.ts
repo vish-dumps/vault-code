@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { Types } from "mongoose";
 import { mongoStorage } from "./mongodb-storage";
 import {
   insertQuestionSchema,
@@ -12,6 +13,15 @@ import type { User } from "@shared/schema";
 import { z } from "zod";
 import { authenticateToken, getUserId, AuthRequest } from "./auth";
 import { Todo } from "./models/Todo";
+import { Question } from "./models/Question";
+import { Approach } from "./models/Approach";
+import { Snippet } from "./models/Snippet";
+import { TopicProgress as TopicProgressModel } from "./models/TopicProgress";
+import { Activity } from "./models/Activity";
+import { Friendship } from "./models/Friendship";
+import { Notification } from "./models/Notification";
+import { User as UserModel } from "./models/User";
+import { Answer } from "./models/Answer";
 import {
   XP_REWARDS,
   XP_COMBO_RULES,
@@ -21,6 +31,12 @@ import {
   applyProgressiveScaling,
   calculateComboBonus
 } from "@shared/gamification";
+import cron from "node-cron";
+import { initRealtime } from "./services/realtime";
+import { computeWeeklyLeaderboard } from "./services/leaderboard";
+import { createAnswerRouter } from "./controllers/answers";
+import { createSocialRouter } from "./controllers/social";
+import { createNotificationsRouter } from "./controllers/notifications";
 
 interface ContestResponse {
   id: string;
@@ -74,7 +90,7 @@ const FALLBACK_CONTESTS: ContestResponse[] = [
 
 const FETCH_TIMEOUT_MS = 7000;
 const PROBLEM_SOURCE_MANUAL = "manual";
-const PROBLEM_SOURCE_AUTO = "auto";
+const PROBLEM_SOURCE_AUTO = "auto" as const;
 
 const solvedProblemPayloadSchema = z.object({
   userId: z.string().optional(),
@@ -263,6 +279,9 @@ async function updateStreakOnActivity(userId: string): Promise<void> {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Apply authentication middleware to all API routes
   app.use('/api', authenticateToken);
+  app.use("/api/answers", createAnswerRouter());
+  app.use("/api", createSocialRouter());
+  app.use("/api", createNotificationsRouter());
 
   // Question routes
   app.get("/api/questions", async (req: AuthRequest, res) => {
@@ -720,6 +739,148 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/user/export", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await mongoStorage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const userObjectId = new Types.ObjectId(userId);
+      const [questions, snippets, topicProgress, activities, friendships, notifications, answers] =
+        await Promise.all([
+          Question.find({ userId }).lean().exec(),
+          Snippet.find({ userId }).lean().exec(),
+          TopicProgressModel.find({ userId }).lean().exec(),
+          Activity.find({
+            $or: [{ userId: userObjectId }, { relatedUserIds: userObjectId }],
+          })
+            .lean()
+            .exec(),
+          Friendship.find({
+            $or: [{ requesterId: userObjectId }, { recipientId: userObjectId }],
+          })
+            .lean()
+            .exec(),
+          Notification.find({ userId: userObjectId }).lean().exec(),
+          Answer.find({ authorId: userObjectId }).lean().exec(),
+        ]);
+
+      const normalizeDocs = (docs: any[]) =>
+        docs.map((doc) => ({
+          ...doc,
+          id: doc._id?.toString(),
+          _id: undefined,
+        }));
+
+      res.json({
+        generatedAt: new Date().toISOString(),
+        user,
+        questions: normalizeDocs(questions),
+        snippets: normalizeDocs(snippets),
+        topicProgress: normalizeDocs(topicProgress),
+        activities: normalizeDocs(activities),
+        friendships: normalizeDocs(friendships),
+        notifications: normalizeDocs(notifications),
+        answers: normalizeDocs(answers),
+      });
+    } catch (error) {
+      console.error("Error exporting account data:", error);
+      res.status(500).json({ error: "Failed to export account data" });
+    }
+  });
+
+  app.post("/api/user/reset", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await mongoStorage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const userObjectId = new Types.ObjectId(userId);
+
+      const userQuestions = await Question.find({ userId }).select("_id").lean().exec();
+      const questionIds = userQuestions.map((question) => question._id?.toString?.()).filter(Boolean);
+
+      const deletePromises = [
+        Question.deleteMany({ userId }).exec(),
+        Snippet.deleteMany({ userId }).exec(),
+        TopicProgressModel.deleteMany({ userId }).exec(),
+        Activity.deleteMany({
+          $or: [{ userId: userObjectId }, { userId }, { relatedUserIds: userObjectId }],
+        }).exec(),
+        Notification.deleteMany({ userId: userObjectId }).exec(),
+        Answer.deleteMany({ authorId: userObjectId }).exec(),
+      ];
+
+      if (questionIds.length) {
+        deletePromises.push(Approach.deleteMany({ questionId: { $in: questionIds } }).exec());
+      }
+
+      await Promise.all(deletePromises);
+
+      await mongoStorage.updateUser(userId, {
+        xp: 0,
+        streak: 0,
+        maxStreak: 0,
+        dailyProgress: 0,
+        lastGoalAwardDate: null,
+        lastPenaltyDate: null,
+        badgesEarned: [],
+        bookmarkedAnswerIds: [],
+        lastSolveAt: null,
+        solveComboCount: 0,
+      } as Partial<User>);
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resetting account:", error);
+      res.status(500).json({ error: "Failed to reset account" });
+    }
+  });
+
+  app.delete("/api/user", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await mongoStorage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const userObjectId = new Types.ObjectId(userId);
+      const userQuestions = await Question.find({ userId }).select("_id").lean().exec();
+      const questionIds = userQuestions.map((question) => question._id?.toString?.()).filter(Boolean);
+
+      const deletionTasks = [
+        Question.deleteMany({ userId }).exec(),
+        Snippet.deleteMany({ userId }).exec(),
+        TopicProgressModel.deleteMany({ userId }).exec(),
+        Activity.deleteMany({
+          $or: [{ userId: userObjectId }, { userId }, { relatedUserIds: userObjectId }],
+        }).exec(),
+        Notification.deleteMany({ userId: userObjectId }).exec(),
+        Answer.deleteMany({ authorId: userObjectId }).exec(),
+        Friendship.deleteMany({
+          $or: [{ requesterId: userObjectId }, { recipientId: userObjectId }],
+        }).exec(),
+      ];
+
+      if (questionIds.length) {
+        deletionTasks.push(Approach.deleteMany({ questionId: { $in: questionIds } }).exec());
+      }
+
+      await Promise.all(deletionTasks);
+      await UserModel.deleteOne({ _id: userObjectId }).exec();
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      res.status(500).json({ error: "Failed to delete account" });
+    }
+  });
+
   app.get("/api/user/gamification", async (req: AuthRequest, res) => {
     try {
       const userId = getUserId(req);
@@ -869,22 +1030,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error building gamification summary:", error);
       res.status(500).json({ error: "Failed to load gamification summary" });
-    }
-  });
-
-  app.patch("/api/user/profile", async (req: AuthRequest, res) => {
-    try {
-      const userId = getUserId(req);
-      const user = await mongoStorage.updateUser(userId, req.body);
-      
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-      
-      res.json(user);
-    } catch (error) {
-      console.error("Error updating user profile:", error);
-      res.status(500).json({ error: "Failed to update profile" });
     }
   });
 
@@ -1155,5 +1300,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  initRealtime(httpServer);
+
+  cron.schedule("0 0 * * 1", async () => {
+    try {
+      await computeWeeklyLeaderboard();
+    } catch (error) {
+      console.error("Failed to compute weekly leaderboard:", error);
+    }
+  });
+
+  computeWeeklyLeaderboard().catch((error) => {
+    console.error("Initial leaderboard computation failed:", error);
+  });
+
   return httpServer;
 }
+

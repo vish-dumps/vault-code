@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Save, Link as LinkIcon, RefreshCw, Upload, Sparkles, Rocket, Zap, ArrowRight, Pencil, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { SiLeetcode, SiCodeforces } from "react-icons/si";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +23,7 @@ import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { toTitleCase } from "@/lib/text";
 import type { QuestionWithDetails, TopicProgress } from "@shared/schema";
+import Cropper from "react-easy-crop";
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
@@ -40,7 +42,13 @@ export default function Profile() {
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const MAX_PROFILE_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB cap to keep base64 reasonable
+  const MAX_PROFILE_IMAGE_SIZE = 4 * 1024 * 1024; // 4MB cap to keep base64 reasonable
+
+  const [pendingCropImage, setPendingCropImage] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<{ width: number; height: number; x: number; y: number } | null>(null);
+  const [isCropping, setIsCropping] = useState(false);
 
   const highlightCards = [
     {
@@ -167,6 +175,54 @@ export default function Profile() {
     return date.toISOString().split("T")[0];
   };
 
+  const createImage = (url: string) =>
+    new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.addEventListener("load", () => resolve(image));
+      image.addEventListener("error", (error) => reject(error));
+      image.setAttribute("crossOrigin", "anonymous");
+      image.src = url;
+    });
+
+  const getCroppedImage = useCallback(
+    async (imageSrc: string, cropArea?: { width: number; height: number; x: number; y: number }) => {
+      if (!cropArea) return null;
+
+      const image = await createImage(imageSrc);
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        return null;
+      }
+
+      const size = Math.min(cropArea.width, cropArea.height);
+      canvas.width = size;
+      canvas.height = size;
+
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.drawImage(
+        image,
+        cropArea.x,
+        cropArea.y,
+        cropArea.width,
+        cropArea.height,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      return canvas.toDataURL("image/jpeg", 0.92);
+    },
+    []
+  );
+
+  const onCropComplete = useCallback((_croppedArea, croppedPixels) => {
+    setCroppedAreaPixels(croppedPixels ?? null);
+  }, []);
+
   const triggerFileUpload = () => {
     fileInputRef.current?.click();
   };
@@ -184,12 +240,43 @@ export default function Profile() {
     const reader = new FileReader();
     reader.onloadend = () => {
       const result = reader.result as string;
-      setProfileImage(result);
-      setCustomAvatarUrl("");
-      setAvatarType("custom");
+      setPendingCropImage(result);
+      setIsCropping(true);
+      setZoom(1);
+      setCrop({ x: 0, y: 0 });
+      setCroppedAreaPixels(null);
     };
     reader.readAsDataURL(file);
   };
+
+  const applyCropResult = useCallback(async () => {
+    if (!pendingCropImage || !croppedAreaPixels) {
+      setIsCropping(false);
+      setPendingCropImage(null);
+      return;
+    }
+
+    try {
+      const cropped = await getCroppedImage(pendingCropImage, croppedAreaPixels);
+      if (cropped) {
+        setProfileImage(cropped);
+        setCustomAvatarUrl("");
+        setAvatarType("custom");
+      }
+    } catch (error) {
+      console.error("Failed to crop image", error);
+      toast({
+        title: "Image crop failed",
+        description: "Please try again with a different image.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCropping(false);
+      setPendingCropImage(null);
+      setCroppedAreaPixels(null);
+      setZoom(1);
+    }
+  }, [croppedAreaPixels, getCroppedImage, pendingCropImage, toast]);
 
   const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -242,12 +329,18 @@ export default function Profile() {
     setAvatarType("random");
     setProfileImage("");
     setCustomAvatarUrl("");
+    setPendingCropImage(null);
+    setIsCropping(false);
+    setCroppedAreaPixels(null);
   };
 
   const handleResetAvatar = () => {
     setAvatarType("initials");
     setProfileImage("");
     setCustomAvatarUrl("");
+    setPendingCropImage(null);
+    setIsCropping(false);
+    setCroppedAreaPixels(null);
   };
 
   const handleSaveAccountInfo = () => {
@@ -617,96 +710,140 @@ export default function Profile() {
                       <DialogTitle>Change Avatar</DialogTitle>
                       <DialogDescription>Choose how you want your avatar to appear</DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-6">
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="relative rounded-full p-[2px]">
-                          <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-purple-500/60 via-fuchsia-500/40 to-cyan-400/60 blur-lg" />
-                          <div className="relative rounded-full bg-slate-900/80 p-1">
-                            <Avatar className="h-24 w-24 ring-2 ring-purple-400/40 shadow-[0_24px_80px_rgba(124,58,237,0.35)]">
-                              {getAvatarUrl() && <AvatarImage src={getAvatarUrl()!} alt="Avatar preview" />}
-                              <AvatarFallback className="bg-gradient-to-br from-purple-500 to-sky-500 text-white text-2xl font-semibold">
-                                {getInitials()}
-                              </AvatarFallback>
-                            </Avatar>
-                          </div>
+                    {isCropping && pendingCropImage ? (
+                      <div className="space-y-6">
+                        <div className="relative h-64 w-full rounded-xl overflow-hidden bg-slate-900/40">
+                          <Cropper
+                            image={pendingCropImage}
+                            crop={crop}
+                            zoom={zoom}
+                            aspect={1}
+                            cropShape="round"
+                            onCropChange={setCrop}
+                            onZoomChange={setZoom}
+                            onCropComplete={onCropComplete}
+                          />
                         </div>
-                        <p className="text-xs text-muted-foreground text-center max-w-xs">
-                          Your avatar updates instantly as you upload, randomize, or reset.
-                        </p>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground uppercase tracking-[0.3em]">
+                            Zoom
+                          </Label>
+                          <Slider
+                            value={[zoom]}
+                            onValueChange={(value) => setZoom(value[0] ?? 1)}
+                            min={1}
+                            max={3}
+                            step={0.1}
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setPendingCropImage(null);
+                              setIsCropping(false);
+                              setCroppedAreaPixels(null);
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button onClick={applyCropResult}>
+                            Apply crop
+                          </Button>
+                        </div>
                       </div>
+                    ) : (
+                      <div className="space-y-6">
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="relative rounded-full p-[2px]">
+                            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-purple-500/60 via-fuchsia-500/40 to-cyan-400/60 blur-lg" />
+                            <div className="relative rounded-full bg-slate-900/80 p-1">
+                              <Avatar className="h-24 w-24 ring-2 ring-purple-400/40 shadow-[0_24px_80px_rgba(124,58,237,0.35)]">
+                                {getAvatarUrl() && <AvatarImage src={getAvatarUrl()!} alt="Avatar preview" />}
+                                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-sky-500 text-white text-2xl font-semibold">
+                                  {getInitials()}
+                                </AvatarFallback>
+                              </Avatar>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground text-center max-w-xs">
+                            Your avatar updates instantly as you upload, randomize, or reset.
+                          </p>
+                        </div>
 
-                      <div className="space-y-3">
-                        <Label className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
-                          Random avatar mood
-                        </Label>
-                        <Select
-                          value={avatarGender}
-                          onValueChange={(value) => setAvatarGender(value as "male" | "female")}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a style" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="male">Bold - Adventurous</SelectItem>
-                            <SelectItem value="female">Vivid - Elegant</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          We use this preference whenever you generate a new CodeVault avatar.
-                        </p>
+                        <div className="space-y-3">
+                          <Label className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
+                            Random avatar mood
+                          </Label>
+                          <Select
+                            value={avatarGender}
+                            onValueChange={(value) => setAvatarGender(value as "male" | "female")}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a style" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="male">Bold - Adventurous</SelectItem>
+                              <SelectItem value="female">Vivid - Elegant</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            We use this preference whenever you generate a new CodeVault avatar.
+                          </p>
+                        </div>
+
+                        <div className="space-y-3">
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleFileInputChange}
+                          />
+                          <Button onClick={triggerFileUpload} className="w-full">
+                            <Upload className="h-4 w-4 mr-2" />
+                            Upload a photo
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full"
+                            onClick={handleGenerateNewAvatar}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Generate a new look
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="w-full text-rose-500 hover:bg-rose-500/10"
+                            onClick={handleResetAvatar}
+                          >
+                            Remove wallpaper
+                          </Button>
+                        </div>
+
+                        {(profileImage || customAvatarUrl) && (
+                          <p className="text-xs text-muted-foreground text-center">
+                            Uploaded avatars stay private to your account. Max size 4&nbsp;MB.
+                          </p>
+                        )}
+
+                        <div className="flex justify-end gap-2 pt-2">
+                          <Button variant="outline" onClick={() => setIsAvatarDialogOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              handleSave();
+                              setIsAvatarDialogOpen(false);
+                            }}
+                          >
+                            Save avatar
+                          </Button>
+                        </div>
                       </div>
-
-                      <div className="space-y-3">
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleFileInputChange}
-                        />
-                        <Button onClick={triggerFileUpload} className="w-full">
-                          <Upload className="h-4 w-4 mr-2" />
-                          Upload a photo
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full"
-                          onClick={handleGenerateNewAvatar}
-                        >
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Generate a new look
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="w-full text-rose-500 hover:bg-rose-500/10"
-                          onClick={handleResetAvatar}
-                        >
-                          Remove wallpaper
-                        </Button>
-                      </div>
-
-                      {(profileImage || customAvatarUrl) && (
-                        <p className="text-xs text-muted-foreground text-center">
-                          Uploaded avatars stay private to your account. Max size 2&nbsp;MB.
-                        </p>
-                      )}
-
-                      <div className="flex justify-end gap-2 pt-2">
-                        <Button variant="outline" onClick={() => setIsAvatarDialogOpen(false)}>
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            handleSave();
-                            setIsAvatarDialogOpen(false);
-                          }}
-                        >
-                          Save avatar
-                        </Button>
-                      </div>
-                    </div>
+                    )}
                   </DialogContent>
                 </Dialog>
                 <div className="text-center">

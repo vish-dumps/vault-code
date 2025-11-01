@@ -8,6 +8,8 @@ type AvatarGender = 'male' | 'female';
 interface User {
   id: string;
   username: string;
+  handle?: string;
+  displayName?: string | null;
   email: string;
   name?: string;
   leetcodeUsername?: string;
@@ -24,6 +26,20 @@ interface User {
   badge?: string;
   lastSolveAt?: string | null;
   solveComboCount?: number;
+  bio?: string | null;
+  college?: string | null;
+  profileVisibility?: "public" | "friends";
+  hideFromLeaderboard?: boolean;
+  badgesEarned?: string[];
+  friendRequestPolicy?: "anyone" | "auto_mutual" | "disabled" | null;
+  searchVisibility?: "public" | "hidden" | null;
+  notificationPreferences?: {
+    friendRequests?: boolean;
+    activityVisibility?: "friends" | "private";
+  } | null;
+  xpVisibility?: "public" | "private" | null;
+  showProgressGraphs?: boolean | null;
+  streakReminders?: boolean | null;
 }
 
 
@@ -93,10 +109,20 @@ function computeAvatarUrl(data: Partial<User> | null | undefined): string | null
 function mapUser(data: any): User {
   const xp = typeof data?.xp === 'number' ? data.xp : 0;
   const badge = getBadgeForXp(xp).name;
+  const displayName = data?.displayName ?? data?.name ?? null;
+  const notificationPreferences = {
+    friendRequests:
+      data?.notificationPreferences?.friendRequests ??
+      (data?.notificationPreferences?.friendRequests === false ? false : true),
+    activityVisibility:
+      data?.notificationPreferences?.activityVisibility ?? 'friends',
+  } as User["notificationPreferences"];
   return {
     ...data,
     xp,
     badge,
+    displayName,
+    notificationPreferences,
     avatarUrl: computeAvatarUrl(data),
   };
 }
@@ -309,5 +335,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 }
 
 export type { LoginResult };
+
 
 

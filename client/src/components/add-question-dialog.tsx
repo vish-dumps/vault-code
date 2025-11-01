@@ -191,19 +191,23 @@ export function AddQuestionDialog({ open, onOpenChange }: AddQuestionDialogProps
             <FormField
               control={form.control}
               name="link"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Problem Link (Optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="https://leetcode.com/problems/..."
-                      {...field}
-                      data-testid="input-question-link"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                const { value, ...rest } = field;
+                return (
+                  <FormItem>
+                    <FormLabel>Problem Link (Optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://leetcode.com/problems/..."
+                        {...rest}
+                        value={value ?? ""}
+                        data-testid="input-question-link"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <div className="space-y-2">
@@ -244,19 +248,23 @@ export function AddQuestionDialog({ open, onOpenChange }: AddQuestionDialogProps
             <FormField
               control={form.control}
               name="notes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Notes (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Add notes about this problem..."
-                      {...field}
-                      data-testid="textarea-question-notes"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                const { value, ...rest } = field;
+                return (
+                  <FormItem>
+                    <FormLabel>Notes (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Add notes about this problem..."
+                        {...rest}
+                        value={value ?? ""}
+                        data-testid="textarea-question-notes"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <FormField
@@ -291,20 +299,24 @@ export function AddQuestionDialog({ open, onOpenChange }: AddQuestionDialogProps
             <FormField
               control={form.control}
               name="approaches.0.code"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Code</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Paste your solution here..."
-                      {...field}
-                      className="font-mono text-sm min-h-32"
-                      data-testid="textarea-approach-code"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                const { value, ...rest } = field;
+                return (
+                  <FormItem>
+                    <FormLabel>Code</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Paste your solution here..."
+                        {...rest}
+                        value={value ?? ""}
+                        className="font-mono text-sm min-h-32"
+                        data-testid="textarea-approach-code"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <div className="flex gap-2 justify-end">
@@ -330,3 +342,7 @@ export function AddQuestionDialog({ open, onOpenChange }: AddQuestionDialogProps
     </Dialog>
   );
 }
+
+
+
+

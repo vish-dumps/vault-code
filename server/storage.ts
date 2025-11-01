@@ -18,6 +18,7 @@ export interface IStorage {
   // User operations
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByHandle(handle: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<User>): Promise<User | undefined>;
 
@@ -74,13 +75,30 @@ export class MemStorage implements IStorage {
     return Array.from(this.users.values()).find((user) => user.username === username);
   }
 
+  async getUserByHandle(handle: string): Promise<User | undefined> {
+    const normalized = handle.toLowerCase();
+    return Array.from(this.users.values()).find((user) => (user.handle ?? "").toLowerCase() === normalized);
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
+    const handleBase = insertUser.handle ?? `@${insertUser.username.toLowerCase()}`;
+    const handle = handleBase.endsWith(id.slice(0, 4))
+      ? handleBase
+      : `${handleBase}-${id.slice(0, 4)}`.toLowerCase();
     const user: User = {
       id,
       username: insertUser.username,
+      handle,
       email: insertUser.email || null,
       name: insertUser.name || null,
+      displayName: insertUser.displayName ?? insertUser.name ?? null,
+      bio: insertUser.bio ?? null,
+      college: insertUser.college ?? null,
+      profileVisibility: insertUser.profileVisibility ?? "public",
+      hideFromLeaderboard: insertUser.hideFromLeaderboard ?? false,
+      badgesEarned: insertUser.badgesEarned ?? [],
+      bookmarkedAnswerIds: insertUser.bookmarkedAnswerIds ?? [],
       profileImage: null,
       leetcodeUsername: insertUser.leetcodeUsername || null,
       codeforcesUsername: insertUser.codeforcesUsername || null,
@@ -95,7 +113,22 @@ export class MemStorage implements IStorage {
       avatarGender: 'male',
       customAvatarUrl: null,
       randomAvatarSeed: null,
+      xp: 0,
+      badge: "Novice",
+      lastSolveAt: null,
+      solveComboCount: 0,
+      lastGoalAwardDate: null,
+      lastPenaltyDate: null,
       createdAt: new Date(),
+      friendRequestPolicy: insertUser.friendRequestPolicy ?? "anyone",
+      searchVisibility: insertUser.searchVisibility ?? "public",
+      notificationPreferences: insertUser.notificationPreferences ?? {
+        friendRequests: true,
+        activityVisibility: "friends",
+      },
+      xpVisibility: insertUser.xpVisibility ?? "public",
+      showProgressGraphs: insertUser.showProgressGraphs ?? true,
+      streakReminders: insertUser.streakReminders ?? true,
     };
     this.users.set(id, user);
     return user;
@@ -104,7 +137,26 @@ export class MemStorage implements IStorage {
   async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
     const user = this.users.get(id);
     if (!user) return undefined;
-    const updated = { ...user, ...data };
+
+    let notificationPreferences = user.notificationPreferences ?? {
+      friendRequests: true,
+      activityVisibility: "friends",
+    };
+
+    if (data.notificationPreferences) {
+      notificationPreferences = {
+        friendRequests:
+          data.notificationPreferences.friendRequests ?? notificationPreferences.friendRequests ?? true,
+        activityVisibility:
+          data.notificationPreferences.activityVisibility ?? notificationPreferences.activityVisibility ?? "friends",
+      };
+    }
+
+    const updated: User = {
+      ...user,
+      ...data,
+      notificationPreferences,
+    };
     this.users.set(id, updated);
     return updated;
   }
@@ -116,9 +168,11 @@ export class MemStorage implements IStorage {
 
     return userQuestions.map((q) => ({
       ...q,
-      tags: this.tags.get(q.id) || [],
+      tags: this.tags.get(typeof q.id === "number" ? q.id : Number(q.id)) || [],
       approaches: Array.from(this.approaches.values()).filter(
-        (a) => a.questionId === q.id
+        (a) =>
+          (typeof a.questionId === "number" ? a.questionId : Number(a.questionId)) ===
+          (typeof q.id === "number" ? q.id : Number(q.id))
       ),
     }));
   }
@@ -131,7 +185,7 @@ export class MemStorage implements IStorage {
       ...question,
       tags: this.tags.get(id) || [],
       approaches: Array.from(this.approaches.values()).filter(
-        (a) => a.questionId === id
+        (a) => Number(a.questionId) === id
       ),
     };
   }
@@ -149,6 +203,10 @@ export class MemStorage implements IStorage {
       link: insertQuestion.link || null,
       difficulty: insertQuestion.difficulty,
       notes: insertQuestion.notes || null,
+      source: insertQuestion.source ?? "manual",
+      problemId: insertQuestion.problemId ? insertQuestion.problemId : null,
+      solvedAt: insertQuestion.solvedAt ?? null,
+      xpAwarded: insertQuestion.xpAwarded ?? 0,
       dateSaved: new Date(),
     };
 
@@ -210,7 +268,7 @@ export class MemStorage implements IStorage {
       ...updated,
       tags: this.tags.get(id) || [],
       approaches: Array.from(this.approaches.values()).filter(
-        (a) => a.questionId === id
+        (a) => Number(a.questionId) === id
       ),
     };
   }
@@ -223,8 +281,8 @@ export class MemStorage implements IStorage {
     this.tags.delete(id);
 
     Array.from(this.approaches.values())
-      .filter((a) => a.questionId === id)
-      .forEach((a) => this.approaches.delete(a.id));
+      .filter((a) => Number(a.questionId) === id)
+      .forEach((a) => this.approaches.delete(Number(a.id)));
 
     return true;
   }
@@ -334,6 +392,7 @@ export class MemStorage implements IStorage {
       language: insertSnippet.language,
       code: insertSnippet.code,
       notes: insertSnippet.notes || null,
+      tags: insertSnippet.tags ?? [],
       createdAt: new Date(),
     };
 
@@ -351,3 +410,5 @@ export class MemStorage implements IStorage {
 }
 
 export const storage = new MemStorage();
+
+

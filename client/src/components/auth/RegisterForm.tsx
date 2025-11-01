@@ -441,3 +441,4 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
     </div>
   );
 }
+

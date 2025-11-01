@@ -24,6 +24,10 @@ import Guide from "@/pages/guide";
 import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
 import RecentSolved from "@/pages/recent-solved";
+import { useRealtimeSubscriptions } from "@/hooks/useRealtime";
+import CommunityFriends from "@/pages/community/friends";
+import CommunityProfile from "@/pages/community/profile";
+import Settings from "@/pages/settings";
 
 function AuthenticatedRoutes() {
   return (
@@ -38,6 +42,9 @@ function AuthenticatedRoutes() {
       <Route path="/contests" component={Contests} />
       <Route path="/profile" component={Profile} />
       <Route path="/guide" component={Guide} />
+      <Route path="/community/friends" component={CommunityFriends} />
+      <Route path="/u/:identity" component={CommunityProfile} />
+      <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -53,6 +60,7 @@ function UnauthenticatedRoutes() {
 }
 
 function AppContent() {
+  useRealtimeSubscriptions();
   const { isAuthenticated, isLoading } = useAuth();
   const [location] = useLocation();
   const style = {

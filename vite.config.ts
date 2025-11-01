@@ -7,23 +7,18 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    onListening: (server: { resolvedUrls?: { local?: string[] } }) => {
-      const addresses = server.resolvedUrls?.local?.map((url: string) => `\n    ${url}`).join('') || '';
-      console.log('\n  🚀 Frontend is running at:', addresses, '\n');
+    fs: {
+      strict: true,
+      deny: ["**/.*"],
     },
   },
   plugins: [
     react(),
     runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
+    ...(process.env.NODE_ENV !== "production" && process.env.REPL_ID !== undefined
       ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer(),
-          ),
-          await import("@replit/vite-plugin-dev-banner").then((m) =>
-            m.devBanner(),
-          ),
+          await import("@replit/vite-plugin-cartographer").then((m) => m.cartographer()),
+          await import("@replit/vite-plugin-dev-banner").then((m) => m.devBanner()),
         ]
       : []),
   ],
@@ -38,11 +33,5 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-  },
-  server: {
-    fs: {
-      strict: true,
-      deny: ["**/.*"],
-    },
   },
 });

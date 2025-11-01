@@ -142,7 +142,7 @@ export function ProfilePopover() {
             <Button
               variant="ghost"
               className="w-full justify-start gap-2 hover:bg-blue-500/10"
-              onClick={() => handleNavigate("/profile")}
+              onClick={() => handleNavigate("/settings")}
             >
               <Settings className="h-4 w-4" />
               Settings

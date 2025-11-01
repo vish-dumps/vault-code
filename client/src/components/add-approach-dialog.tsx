@@ -142,38 +142,46 @@ export function AddApproachDialog({
             <FormField
               control={form.control}
               name="code"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Code</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Paste your solution here..."
-                      {...field}
-                      className="font-mono text-sm min-h-48"
-                      data-testid="textarea-code"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                const { value, ...rest } = field;
+                return (
+                  <FormItem>
+                    <FormLabel>Code</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Paste your solution here..."
+                        {...rest}
+                        value={value ?? ""}
+                        className="font-mono text-sm min-h-48"
+                        data-testid="textarea-code"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <FormField
               control={form.control}
               name="notes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Notes (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Add notes about this approach..."
-                      {...field}
-                      data-testid="textarea-notes"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                const { value, ...rest } = field;
+                return (
+                  <FormItem>
+                    <FormLabel>Notes (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Add notes about this approach..."
+                        {...rest}
+                        value={value ?? ""}
+                        data-testid="textarea-notes"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <div className="flex gap-2 justify-end">
@@ -199,3 +207,6 @@ export function AddApproachDialog({
     </Dialog>
   );
 }
+
+
+

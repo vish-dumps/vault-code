@@ -12,7 +12,7 @@ import {
   type Snippet,
   type InsertSnippet,
 } from "@shared/schema";
-import { User as UserModel, IUser } from "./models/User";
+import { User as UserModel, IUser, sanitizeHandle } from "./models/User";
 import { Question as QuestionModel, IQuestion } from "./models/Question";
 import { Approach as ApproachModel, IApproach } from "./models/Approach";
 import { Snippet as SnippetModel, ISnippet } from "./models/Snippet";
@@ -22,6 +22,7 @@ export interface IStorage {
   // User operations
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByHandle(handle: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<User>): Promise<User | undefined>;
@@ -66,14 +67,59 @@ export class MongoStorage implements IStorage {
     return user ? this.mapUserToSchema(user) : undefined;
   }
 
+  async getUserByHandle(handle: string): Promise<User | undefined> {
+    const sanitized = sanitizeHandle(handle);
+    const user = await UserModel.findOne({ handle: sanitized.toLowerCase() }).select('-password');
+    return user ? this.mapUserToSchema(user) : undefined;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
+    const providedHandle = insertUser.handle ? sanitizeHandle(insertUser.handle) : undefined;
+    if (providedHandle) {
+      const existing = await UserModel.exists({ handle: providedHandle });
+      if (existing) {
+        throw new Error("Handle already taken");
+      }
+    }
+
+    const profileVisibility = insertUser.profileVisibility === "friends" ? "friends" : "public";
+    const friendRequestPolicy =
+      insertUser.friendRequestPolicy === "auto_mutual" || insertUser.friendRequestPolicy === "disabled"
+        ? insertUser.friendRequestPolicy
+        : "anyone";
+    const searchVisibility = insertUser.searchVisibility === "hidden" ? "hidden" : "public";
+    const xpVisibility = insertUser.xpVisibility === "private" ? "private" : "public";
+    const notificationPreferences = {
+      friendRequests: insertUser.notificationPreferences?.friendRequests ?? true,
+      activityVisibility:
+        insertUser.notificationPreferences?.activityVisibility === "private" ? "private" : "friends",
+    };
+    const showProgressGraphs =
+      insertUser.showProgressGraphs !== undefined ? Boolean(insertUser.showProgressGraphs) : true;
+    const streakReminders =
+      insertUser.streakReminders !== undefined ? Boolean(insertUser.streakReminders) : true;
+
     const user = new UserModel({
       username: insertUser.username,
+      handle: providedHandle,
       email: insertUser.email,
       password: insertUser.password,
       name: insertUser.name,
+      displayName: insertUser.displayName ?? insertUser.name,
+      bio: insertUser.bio,
+      college: insertUser.college,
+      profileVisibility,
+      hideFromLeaderboard: insertUser.hideFromLeaderboard,
+      badgesEarned: insertUser.badgesEarned,
+      bookmarkedAnswerIds: insertUser.bookmarkedAnswerIds,
       leetcodeUsername: insertUser.leetcodeUsername,
       codeforcesUsername: insertUser.codeforcesUsername,
+      friendRequestPolicy,
+      searchVisibility,
+      notificationPreferences,
+      xpVisibility,
+      showProgressGraphs,
+      streakReminders,
     });
     
     await user.save();
@@ -81,8 +127,135 @@ export class MongoStorage implements IStorage {
   }
 
   async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
-    const user = await UserModel.findByIdAndUpdate(id, data, { new: true }).select('-password');
-    return user ? this.mapUserToSchema(user) : undefined;
+    const userDoc = await UserModel.findById(id);
+    if (!userDoc) {
+      return undefined;
+    }
+
+    if (data.handle) {
+      const sanitized = sanitizeHandle(data.handle);
+      const conflict = await UserModel.exists({ handle: sanitized, _id: { $ne: id } });
+      if (conflict) {
+        throw new Error("Handle already taken");
+      }
+      userDoc.handle = sanitized;
+    }
+
+    if (typeof data.profileVisibility === "string") {
+      if (!["public", "friends"].includes(data.profileVisibility)) {
+        throw new Error("Invalid profile visibility");
+      }
+      userDoc.profileVisibility = data.profileVisibility as typeof userDoc.profileVisibility;
+    }
+
+    if (typeof data.friendRequestPolicy === "string") {
+      if (!["anyone", "auto_mutual", "disabled"].includes(data.friendRequestPolicy)) {
+        throw new Error("Invalid friend request policy");
+      }
+      userDoc.friendRequestPolicy = data.friendRequestPolicy as typeof userDoc.friendRequestPolicy;
+    }
+
+    if (typeof data.searchVisibility === "string") {
+      if (!["public", "hidden"].includes(data.searchVisibility)) {
+        throw new Error("Invalid search visibility");
+      }
+      userDoc.searchVisibility = data.searchVisibility as typeof userDoc.searchVisibility;
+    }
+
+    if (data.notificationPreferences) {
+      const currentPrefs = userDoc.notificationPreferences ?? {};
+      const nextPrefs = {
+        friendRequests:
+          data.notificationPreferences.friendRequests ?? currentPrefs.friendRequests ?? true,
+        activityVisibility:
+          data.notificationPreferences.activityVisibility ?? currentPrefs.activityVisibility ?? "friends",
+      };
+      if (!["friends", "private"].includes(nextPrefs.activityVisibility)) {
+        throw new Error("Invalid activity visibility preference");
+      }
+      userDoc.notificationPreferences = nextPrefs;
+    }
+
+    if (typeof data.xpVisibility === "string") {
+      if (!["public", "private"].includes(data.xpVisibility)) {
+        throw new Error("Invalid XP visibility option");
+      }
+      userDoc.xpVisibility = data.xpVisibility as typeof userDoc.xpVisibility;
+    }
+
+    if (data.showProgressGraphs !== undefined) {
+      userDoc.showProgressGraphs = Boolean(data.showProgressGraphs);
+    }
+
+    if (data.streakReminders !== undefined) {
+      userDoc.streakReminders = Boolean(data.streakReminders);
+    }
+
+    if (data.hideFromLeaderboard !== undefined) {
+      userDoc.hideFromLeaderboard = Boolean(data.hideFromLeaderboard);
+    }
+
+    if (data.displayName === undefined && data.name !== undefined) {
+      userDoc.displayName = data.name;
+    }
+
+    if (data.displayName !== undefined) {
+      userDoc.displayName = data.displayName ?? null;
+    }
+
+    if (data.name !== undefined) {
+      userDoc.name = data.name ?? null;
+    }
+
+    if (data.bio !== undefined) {
+      userDoc.bio = data.bio ?? null;
+    }
+
+    if (data.college !== undefined) {
+      userDoc.college = data.college ?? null;
+    }
+
+    if (data.badgesEarned) {
+      userDoc.badgesEarned = Array.from(new Set(data.badgesEarned));
+    }
+
+    if (data.bookmarkedAnswerIds) {
+      const uniqueBookmarks = Array.from(new Set(data.bookmarkedAnswerIds));
+      userDoc.bookmarkedAnswerIds = uniqueBookmarks as any;
+    }
+
+    if (data.leetcodeUsername !== undefined) {
+      userDoc.leetcodeUsername = data.leetcodeUsername ?? null;
+    }
+
+    if (data.codeforcesUsername !== undefined) {
+      userDoc.codeforcesUsername = data.codeforcesUsername ?? null;
+    }
+
+    if (data.profileImage !== undefined) {
+      userDoc.profileImage = data.profileImage ?? null;
+    }
+
+    if (data.avatarType !== undefined) {
+      userDoc.avatarType = data.avatarType as any;
+    }
+
+    if (data.avatarGender !== undefined) {
+      userDoc.avatarGender = data.avatarGender as any;
+    }
+
+    if (data.customAvatarUrl !== undefined) {
+      userDoc.customAvatarUrl = data.customAvatarUrl ?? null;
+    }
+
+    if (data.randomAvatarSeed !== undefined) {
+      userDoc.randomAvatarSeed = data.randomAvatarSeed ?? null;
+    }
+
+    await userDoc.save();
+
+    const fresh = await UserModel.findById(id).select('-password');
+    return fresh ? this.mapUserToSchema(fresh) : undefined;
   }
 
   async getQuestions(userId: string): Promise<QuestionWithDetails[]> {
@@ -320,8 +493,18 @@ export class MongoStorage implements IStorage {
     return {
       id: user._id.toString(),
       username: user.username,
+      handle: user.handle ?? "",
       email: user.email,
       name: user.name ?? null,
+      displayName: user.displayName ?? user.name ?? null,
+      bio: user.bio ?? null,
+      college: user.college ?? null,
+      profileVisibility: (user.profileVisibility as User["profileVisibility"]) ?? "public",
+      hideFromLeaderboard: user.hideFromLeaderboard ?? false,
+      badgesEarned: user.badgesEarned ?? [],
+      bookmarkedAnswerIds: Array.isArray(user.bookmarkedAnswerIds)
+        ? user.bookmarkedAnswerIds.map((value: any) => value.toString?.() ?? String(value))
+        : [],
       profileImage: user.profileImage ?? null,
       leetcodeUsername: user.leetcodeUsername ?? null,
       codeforcesUsername: user.codeforcesUsername ?? null,
@@ -343,6 +526,15 @@ export class MongoStorage implements IStorage {
       badge: user.badge ?? "Novice",
       lastGoalAwardDate: user.lastGoalAwardDate ?? null,
       lastPenaltyDate: user.lastPenaltyDate ?? null,
+      friendRequestPolicy: user.friendRequestPolicy ?? "anyone",
+      searchVisibility: user.searchVisibility ?? "public",
+      notificationPreferences: {
+        friendRequests: user.notificationPreferences?.friendRequests ?? true,
+        activityVisibility: user.notificationPreferences?.activityVisibility ?? "friends",
+      },
+      xpVisibility: user.xpVisibility ?? "public",
+      showProgressGraphs: user.showProgressGraphs ?? true,
+      streakReminders: user.streakReminders ?? true,
     };
   }
 
@@ -404,5 +596,7 @@ export class MongoStorage implements IStorage {
 }
 
 export const mongoStorage = new MongoStorage();
+
+
 
 
