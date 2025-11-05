@@ -4,7 +4,9 @@ export type NotificationType =
   | 'friend_request'
   | 'friend_accepted'
   | 'friend_declined'
-  | 'system';
+  | 'system'
+  | 'achievement'
+  | 'reward';
 
 export interface INotification extends Document {
   userId: Types.ObjectId;
@@ -27,7 +29,7 @@ const NotificationSchema = new Schema<INotification>(
     },
     type: {
       type: String,
-      enum: ['friend_request', 'friend_accepted', 'friend_declined', 'system'],
+      enum: ['friend_request', 'friend_accepted', 'friend_declined', 'system', 'achievement', 'reward'],
       required: true,
       default: 'system',
     },

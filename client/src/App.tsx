@@ -27,7 +27,12 @@ import RecentSolved from "@/pages/recent-solved";
 import { useRealtimeSubscriptions } from "@/hooks/useRealtime";
 import CommunityFriends from "@/pages/community/friends";
 import CommunityProfile from "@/pages/community/profile";
+import FriendProfile from "@/pages/community/friend-profile";
 import Settings from "@/pages/settings";
+import Feedback from "@/pages/feedback";
+import About from "@/pages/about";
+import Support from "@/pages/support";
+import { OnboardingTutorial } from "@/components/onboarding-tutorial";
 
 function AuthenticatedRoutes() {
   return (
@@ -42,9 +47,13 @@ function AuthenticatedRoutes() {
       <Route path="/contests" component={Contests} />
       <Route path="/profile" component={Profile} />
       <Route path="/guide" component={Guide} />
+      <Route path="/community/friends/:friendId" component={FriendProfile} />
       <Route path="/community/friends" component={CommunityFriends} />
       <Route path="/u/:identity" component={CommunityProfile} />
       <Route path="/settings" component={Settings} />
+      <Route path="/feedback" component={Feedback} />
+      <Route path="/about" component={About} />
+      <Route path="/support" component={Support} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -101,6 +110,7 @@ function AppContent() {
           </main>
         </div>
       </div>
+      <OnboardingTutorial />
     </SidebarProvider>
   );
 }

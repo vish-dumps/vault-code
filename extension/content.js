@@ -76,9 +76,10 @@ async function scrapeLeetCode() {
   const questionData = extractLeetCodeQuestionData();
 
   if (questionData) {
+    const normalizedDifficulty = normalizeLeetCodeDifficultyLabel(questionData.difficulty);
     result.title = questionData.title || "";
-    result.metadata.difficulty = questionData.difficulty || "Unknown";
-    result.metadata.displayDifficulty = questionData.difficulty || "Unknown";
+    result.metadata.difficulty = normalizedDifficulty || questionData.difficulty || "Unknown";
+    result.metadata.displayDifficulty = normalizedDifficulty || questionData.difficulty || "Unknown";
     const tagNames = (questionData.topicTags || [])
       .map((tag) => tag.name || tag.slug || "")
       .filter(Boolean);
@@ -97,7 +98,7 @@ async function scrapeLeetCode() {
   result.code = editorPayload.code || extractLeetCodeDomCode();
   result.metadata.language = editorPayload.language || detectLeetCodeLanguage();
 
-  if (!result.metadata.difficulty) {
+  if (!result.metadata.difficulty || result.metadata.difficulty === "Unknown") {
     result.metadata.difficulty = detectLeetCodeDifficulty();
   }
 
@@ -257,12 +258,40 @@ function detectLeetCodeLanguage() {
   return "Unknown";
 }
 
+function normalizeLeetCodeDifficultyLabel(value) {
+  if (!value) return null;
+  const normalized = value.toString().trim().toLowerCase();
+  if (normalized === "easy" || normalized === "medium" || normalized === "hard") {
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  }
+  return null;
+}
+
 function detectLeetCodeDifficulty() {
-  const badge = document.querySelector(
-    "[diff], span.text-difficulty, span.difficulty"
-  );
-  if (!badge?.textContent) return "Unknown";
-  return badge.textContent.replace(/Difficulty\s*:?/, "").trim();
+  const selectors = [
+    "[data-difficulty]",
+    "[diff]",
+    "span.text-difficulty",
+    "span.difficulty",
+    ".text-difficulty",
+    ".difficulty-badge",
+  ];
+
+  for (const selector of selectors) {
+    const node = document.querySelector(selector);
+    const normalized = normalizeLeetCodeDifficultyLabel(node?.textContent);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  const headerMatch = document.body.innerText.match(/Difficulty\s*:?(\s+)?(Easy|Medium|Hard)/i);
+  if (headerMatch?.[2]) {
+    const normalized = normalizeLeetCodeDifficultyLabel(headerMatch[2]);
+    if (normalized) return normalized;
+  }
+
+  return "Unknown";
 }
 
 function extractCodeforcesDifficulty() {
@@ -566,7 +595,7 @@ function nodeMatchesVerdictContext(node) {
   );
 }
 
-function getLeetCodeSlug(url) {
+function getLeetCodeSlug(url = window.location.href) {
   try {
     const parsed = new URL(url);
     const match = parsed.pathname.match(/\/problems\/([^/]+)\//);
@@ -574,8 +603,21 @@ function getLeetCodeSlug(url) {
       return match[1].toLowerCase();
     }
   } catch {
-    return null;
+    // continue to fallback sources
   }
+
+  const questionData = extractLeetCodeQuestionData();
+  if (questionData?.titleSlug) {
+    return questionData.titleSlug.toLowerCase();
+  }
+
+  const slugAttr =
+    document.querySelector("[data-question-title-slug]")?.getAttribute("data-question-title-slug") ||
+    document.querySelector("[data-slug]")?.getAttribute("data-slug");
+  if (slugAttr) {
+    return slugAttr.toLowerCase();
+  }
+
   return null;
 }
 

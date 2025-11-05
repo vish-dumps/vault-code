@@ -50,8 +50,59 @@ export interface IUser extends Document {
   otpVerifiedAt?: Date;
   lastSolveAt?: Date;
   solveComboCount?: number;
+  rewardsInventory?: Array<{
+    id: string;
+    rewardId: string;
+    instanceId: string;
+    status: "available" | "consumed";
+    earnedAt: Date;
+    usedAt?: Date;
+    metadata?: Record<string, unknown>;
+  }>;
+  rewardEffects?: Array<{
+    id: string;
+    rewardId: string;
+    instanceId: string;
+    type: string;
+    activatedAt: Date;
+    expiresAt?: Date;
+    usesRemaining?: number;
+    metadata?: Record<string, unknown>;
+  }>;
+  lastRewardXpCheckpoint?: number;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
+
+const RewardInventorySchema = new Schema(
+  {
+    id: { type: String, required: true },
+    rewardId: { type: String, required: true },
+    instanceId: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ['available', 'consumed'],
+      default: 'available',
+    },
+    earnedAt: { type: Date, default: Date.now },
+    usedAt: { type: Date },
+    metadata: { type: Schema.Types.Mixed },
+  },
+  { _id: false }
+);
+
+const RewardEffectSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    rewardId: { type: String, required: true },
+    instanceId: { type: String, required: true },
+    type: { type: String, required: true },
+    activatedAt: { type: Date, default: Date.now },
+    expiresAt: { type: Date },
+    usesRemaining: { type: Number },
+    metadata: { type: Schema.Types.Mixed },
+  },
+  { _id: false }
+);
 
 const UserSchema = new Schema<IUser>({
   username: {
@@ -65,7 +116,6 @@ const UserSchema = new Schema<IUser>({
   handle: {
     type: String,
     required: false,
-    unique: true,
     trim: true,
     lowercase: true,
     minlength: 4,
@@ -229,6 +279,18 @@ const UserSchema = new Schema<IUser>({
     type: Boolean,
     default: true,
   },
+  rewardsInventory: {
+    type: [RewardInventorySchema],
+    default: [],
+  },
+  rewardEffects: {
+    type: [RewardEffectSchema],
+    default: [],
+  },
+  lastRewardXpCheckpoint: {
+    type: Number,
+    default: 0,
+  },
   otpCodeHash: {
     type: String,
     select: false
@@ -250,7 +312,6 @@ const UserSchema = new Schema<IUser>({
 });
 
 UserSchema.index({ handle: 1 }, { unique: true, sparse: true });
-UserSchema.index({ username: 1 }, { unique: true });
 UserSchema.index({ displayName: 1 });
 UserSchema.index({ name: 1 });
 
@@ -337,6 +398,7 @@ UserSchema.methods.comparePassword = async function(candidatePassword: string): 
 };
 
 export const User = mongoose.model<IUser>('User', UserSchema);
+
 
 
 

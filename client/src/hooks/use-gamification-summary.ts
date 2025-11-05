@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
 import type { BadgeTier } from "@shared/gamification";
+import type { RewardSummary } from "@shared/schema";
 
 interface GamificationBreakdownItem {
   id: string;
@@ -12,6 +13,17 @@ interface GamificationBreakdownItem {
   total: number;
   active: boolean;
   projected?: boolean;
+}
+
+export interface XpHistoryEntry {
+  id: string;
+  title: string;
+  platform: string;
+  xp: number;
+  timestamp: string;
+  difficulty?: string | null;
+  type: "auto" | "manual" | "goal";
+  link?: string | null;
 }
 
 export interface GamificationSummary {
@@ -40,6 +52,12 @@ export interface GamificationSummary {
     projectedNegative: number;
   };
   suggestions: string[];
+  rewards: {
+    available: RewardSummary[];
+    active: RewardSummary[];
+    upcoming: RewardSummary[];
+  };
+  xpHistory: XpHistoryEntry[];
 }
 
 export function useGamificationSummary(enabled = true) {
@@ -70,4 +88,3 @@ export function useGamificationSummary(enabled = true) {
 
   return query;
 }
-

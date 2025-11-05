@@ -102,7 +102,7 @@ export function XpPill() {
       <PopoverContent
         align="end"
         sideOffset={12}
-        className="w-[22rem] p-0 shadow-xl"
+        className="w-[min(75vw,960px)] max-h-[70vh] overflow-hidden rounded-3xl border-transparent bg-transparent p-0 shadow-2xl"
         onMouseEnter={handleHoverEnter}
         onMouseLeave={handleHoverLeave}
       >

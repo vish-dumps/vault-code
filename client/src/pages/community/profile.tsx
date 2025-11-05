@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Users, ArrowLeft, UserMinus, UserPlus } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type ProfileResponse = {
   profile: {
@@ -56,6 +66,7 @@ export default function CommunityProfile() {
   const [, navigate] = useLocation();
   const [match, params] = useRoute<{ identity: string }>("/u/:identity");
   const { toast } = useToast();
+  const [friendToRemove, setFriendToRemove] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!match) {
@@ -99,6 +110,7 @@ export default function CommunityProfile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users", identity] });
       toast({ title: "Friend removed", description: "You are no longer connected." });
+      setFriendToRemove(null);
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to remove friend.", variant: "destructive" });
@@ -146,8 +158,10 @@ export default function CommunityProfile() {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => removeFriendMutation.mutate(profile.id)}
-                        disabled={removeFriendMutation.isPending}
+                        onClick={() => setFriendToRemove({
+                          id: profile.id,
+                          name: profile.displayName || profile.username || "this friend"
+                        })}
                       >
                         <UserMinus className="mr-2 h-4 w-4" />
                         Remove Friend
@@ -266,6 +280,28 @@ export default function CommunityProfile() {
           </Card>
         </>
       )}
+
+      {/* Remove Friend Confirmation Dialog */}
+      <AlertDialog open={!!friendToRemove} onOpenChange={(open) => !open && setFriendToRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Friend?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove <span className="font-semibold">{friendToRemove?.name}</span> from your friends list?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => friendToRemove && removeFriendMutation.mutate(friendToRemove.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove Friend
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -92,6 +92,21 @@ export default function Profile() {
     refetchInterval: 30000,
   });
 
+  // Fetch auto-tracked solved questions for heatmap
+  const { data: solvedQuestions = [] } = useQuery<QuestionWithDetails[]>({
+    queryKey: ["/api/user/solved"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/user/solved?limit=200");
+      return res.json();
+    },
+    refetchInterval: 30000,
+  });
+
+  const { data: activityHeatmap = [] } = useQuery<Array<{ date: string; count: number; xp?: number }>>({
+    queryKey: ["/api/user/activity-heatmap"],
+    refetchInterval: 60000,
+  });
+
   // Fetch topic progress for graph
   const { data: topicProgress = [] } = useQuery<TopicProgress[]>({
     queryKey: ["/api/topics"],
@@ -412,10 +427,10 @@ export default function Profile() {
 
   const heatmapData = useMemo(() => {
     const counts = new Map<string, number>();
-    questions.forEach((question) => {
-      const key = normalizeDateKey(question.dateSaved);
-      if (key) {
-        counts.set(key, (counts.get(key) || 0) + 1);
+
+    activityHeatmap.forEach((entry) => {
+      if (entry?.date) {
+        counts.set(entry.date, entry.count ?? 0);
       }
     });
 
@@ -431,13 +446,22 @@ export default function Profile() {
     }
 
     return results;
-  }, [questions]);
+  }, [activityHeatmap]);
 
   const dailyActivityData = useMemo(() => {
     const dateCountMap = new Map<string, number>();
 
+    // Include manual questions
     questions.forEach((question) => {
       const key = normalizeDateKey(question.dateSaved);
+      if (key) {
+        dateCountMap.set(key, (dateCountMap.get(key) || 0) + 1);
+      }
+    });
+
+    // Include auto-tracked solved questions
+    solvedQuestions.forEach((question) => {
+      const key = normalizeDateKey(question.solvedAt || question.dateSaved);
       if (key) {
         dateCountMap.set(key, (dateCountMap.get(key) || 0) + 1);
       }
@@ -459,7 +483,7 @@ export default function Profile() {
     }
 
     return data;
-  }, [questions]);
+  }, [questions, solvedQuestions]);
 
   const todoHistory = useMemo(() => {
     const stats = new Map<string, { added: number; completed: number }>();

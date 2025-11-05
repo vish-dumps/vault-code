@@ -12,9 +12,9 @@ const CODEFORCES_MAX_POLLS = 5;
 const LEETCODE_CONFIRMATION_WINDOW_MS = 5 * 60 * 1000;
 const CODEFORCES_CONFIRMATION_WINDOW_MS = 10 * 60 * 1000;
 const AUTO_TRACK_DIFFICULTY_XP = {
-  Easy: 50,
-  Medium: 80,
-  Hard: 120
+  Easy: 40,
+  Medium: 75,
+  Hard: 100
 };
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -343,7 +343,7 @@ async function handleAutoTrackDetection(payload) {
   }
 
   const difficulty = confirmation.difficulty || "Medium";
-  const xpAwardedFallback = computeXpForDifficulty(difficulty);
+  const xpAwardedFallback = computeXpForDifficulty(difficulty, confirmation.platform);
 
   const requestBody = {
     userId: user.id,
@@ -502,7 +502,7 @@ function getSolvedCacheKey(platform, problemId) {
   return `${normalizedPlatform}:${problemId.toString().toLowerCase()}`;
 }
 
-function computeXpForDifficulty(difficulty) {
+function computeXpForDifficulty(difficulty, _platform) {
   const normalized = difficulty?.toString().toLowerCase() ?? "medium";
   if (normalized === "easy") return AUTO_TRACK_DIFFICULTY_XP.Easy;
   if (normalized === "hard") return AUTO_TRACK_DIFFICULTY_XP.Hard;

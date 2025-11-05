@@ -17,6 +17,7 @@ type SearchResult = {
   badge?: string;
   bio?: string | null;
   college?: string | null;
+  profileVisibility?: "public" | "friends";
   isFriend?: boolean;
   isSelf?: boolean;
 };
@@ -91,12 +92,15 @@ export default function CommunitySearch() {
                   {result.isSelf ? (
                     <Badge variant="outline">This is you</Badge>
                   ) : (
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/u/${result.handle ?? result.username}`}>
-                        View profile
-                        <ArrowRight className="ml-1 h-4 w-4" />
-                      </Link>
-                    </Button>
+                    // Show "View profile" button only for public profiles or if user is a friend
+                    (result.profileVisibility === "public" || result.isFriend) && (
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link href={`/u/${result.handle ?? result.username}`}>
+                          View profile
+                          <ArrowRight className="ml-1 h-4 w-4" />
+                        </Link>
+                      </Button>
+                    )
                   )}
                 </div>
               </div>

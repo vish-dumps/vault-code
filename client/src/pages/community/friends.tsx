@@ -13,7 +13,18 @@ import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Users, UserPlus, UserMinus, UserCheck, UserX, Sparkles, Clock } from "lucide-react";
+import { Users, UserPlus, UserMinus, UserCheck, UserX, Sparkles, Clock, Bell, Code2 } from "lucide-react";
+import { useLocation } from "wouter";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type FriendSummary = {
   id: string;
@@ -140,10 +151,12 @@ function getAvatarUrl(
 export default function CommunityFriends() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [tab, setTab] = useState<"friends" | "requests" | "discover" | "insights">("friends");
   const [search, setSearch] = useState("");
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [friendToRemove, setFriendToRemove] = useState<{ id: string; name: string } | null>(null);
 
   const identity = user?.id ?? "me";
 
@@ -234,7 +247,27 @@ export default function CommunityFriends() {
       queryClient.invalidateQueries({ queryKey: ["/api/friends/requests"] });
       toast({ title: "Friend removed", description: "Connection removed successfully." });
       setIsDetailsOpen(false);
+      setFriendToRemove(null);
       setSelectedFriendId(null);
+    },
+  });
+
+  const pokeFriendMutation = useMutation({
+    mutationFn: async (friendId: string) => {
+      await apiRequest("POST", `/api/friends/${friendId}/poke`, {});
+    },
+    onSuccess: () => {
+      toast({ 
+        title: "Poke sent! 👋", 
+        description: "Your friend will be notified to maintain their streak." 
+      });
+    },
+    onError: () => {
+      toast({ 
+        title: "Error", 
+        description: "Failed to send poke.", 
+        variant: "destructive" 
+      });
     },
   });
 
@@ -487,8 +520,10 @@ export default function CommunityFriends() {
                   <Button
                     variant="destructive"
                     className="w-full"
-                    onClick={() => removeFriendMutation.mutate(friendProfile.profile.id)}
-                    disabled={removeFriendMutation.isPending}
+                    onClick={() => setFriendToRemove({
+                      id: friendProfile.profile.id,
+                      name: friendProfile.profile.displayName || friendProfile.profile.username || "this friend"
+                    })}
                   >
                     <UserMinus className="mr-2 h-4 w-4" />
                     Remove friend
@@ -625,13 +660,10 @@ export default function CommunityFriends() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          setSelectedFriendId(friend.id);
-                          setIsDetailsOpen(true);
-                        }}
+                        onClick={() => setLocation(`/community/friends/${friend.id}`)}
                       >
                         <Sparkles className="mr-1 h-4 w-4" />
-                        View
+                        View Profile
                       </Button>
                     </div>
                   </div>
@@ -884,8 +916,20 @@ export default function CommunityFriends() {
                 <div className="space-y-2 text-sm">
                   {streakLeaders.map((friend) => (
                     <div key={friend.id} className="flex items-center justify-between rounded border px-3 py-2">
-                      <span className="font-medium text-foreground">{friend.displayName ?? friend.username}</span>
-                      <span className="text-muted-foreground">{friend.streak ?? 0} days</span>
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="font-medium text-foreground">{friend.displayName ?? friend.username}</span>
+                        <span className="text-muted-foreground">{friend.streak ?? 0} days</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2"
+                        onClick={() => pokeFriendMutation.mutate(friend.id)}
+                        disabled={pokeFriendMutation.isPending}
+                        title="Remind them to maintain their streak"
+                      >
+                        <Bell className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -893,7 +937,7 @@ export default function CommunityFriends() {
             </CardContent>
           </Card>
 
-          <Card className="xl:col-span-2">
+          <Card>
             <CardHeader className="flex items-center gap-2">
               <Users className="h-5 w-5 text-primary" />
               <CardTitle className="text-base font-semibold">Team XP momentum</CardTitle>
@@ -903,7 +947,7 @@ export default function CommunityFriends() {
                 <p className="text-sm text-muted-foreground">Invite friends to CodeVault to start tracking XP momentum together.</p>
               ) : (
                 <div className="space-y-3">
-                  {xpLeaders.leaderboard.map((friend) => (
+                  {xpLeaders.leaderboard.slice(0, 5).map((friend) => (
                     <div key={friend.id} className="space-y-1">
                       <div className="flex items-center justify-between text-sm">
                         <span className="font-medium text-foreground">{friend.displayName ?? friend.username}</span>
@@ -911,9 +955,39 @@ export default function CommunityFriends() {
                       </div>
                       <div className="h-2 rounded-full bg-secondary">
                         <div
-                          className="h-2 rounded-full bg-emerald-500"
+                          className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-blue-500"
                           style={{ width: `${xpLeaders.max > 0 ? ((friend.xp ?? 0) / xpLeaders.max) * 100 : 0}%` }}
                         />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex items-center gap-2">
+              <Code2 className="h-5 w-5 text-primary" />
+              <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {friendActivities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent activity from friends.</p>
+              ) : (
+                <div className="space-y-3">
+                  {friendActivities.slice(0, 5).map((activity) => (
+                    <div key={activity.id} className="flex items-start gap-3 text-sm">
+                      <div className="w-2 h-2 rounded-full bg-green-500 mt-1.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-foreground">
+                          <span className="font-semibold">{activity.user?.displayName ?? activity.user?.username}</span>
+                          {" "}
+                          <span className="text-muted-foreground">{activity.summary}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -925,6 +999,28 @@ export default function CommunityFriends() {
       )}
 
     </div>
+
+    {/* Remove Friend Confirmation Dialog */}
+    <AlertDialog open={!!friendToRemove} onOpenChange={(open) => !open && setFriendToRemove(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove Friend?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to remove <span className="font-semibold">{friendToRemove?.name}</span> from your friends list?
+            This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => friendToRemove && removeFriendMutation.mutate(friendToRemove.id)}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Remove Friend
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     </>
   );
 }

@@ -51,6 +51,17 @@ const resendRegisterOtpSchema = z.object({
   password: z.string().min(6),
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+const resetPasswordSchema = z.object({
+  email: z.string().email(),
+  otp: z.string().length(OTP_LENGTH),
+  otpSession: z.string().min(16),
+  newPassword: z.string().min(6),
+});
+
 // Register endpoint
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -441,7 +452,114 @@ router.get('/verify', authenticateToken, async (req: AuthRequest, res: Response)
   }
 });
 
+// Forgot password endpoint - sends OTP to email
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = forgotPasswordSchema.parse(req.body);
+    
+    const user = await UserModel.findOne({ email });
+    if (!user) {
+      // Don't reveal if user exists for security
+      return res.json({
+        message: 'If an account exists with this email, a password reset code has been sent.',
+      });
+    }
+
+    // Generate OTP for password reset
+    const otpCode = generateOtpCode();
+    const otpSession = createOtpSessionToken();
+    const otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+    
+    user.set({
+      otpCodeHash: hashOtpCode(otpCode),
+      otpSession,
+      otpExpiresAt,
+      otpVerifiedAt: undefined,
+    });
+    await user.save();
+
+    await sendOtpEmail({
+      to: user.email,
+      code: otpCode,
+      expiresAt: otpExpiresAt,
+    });
+
+    if (!IS_PRODUCTION) {
+      console.info(
+        `[Auth] Password reset OTP for ${user.email}: ${otpCode} (expires in ${OTP_EXPIRY_MINUTES} minutes)`
+      );
+    }
+
+    res.json({
+      message: 'If an account exists with this email, a password reset code has been sent.',
+      otpSession,
+      expiresIn: OTP_EXPIRY_MS,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Validation error',
+        details: error.errors,
+      });
+    }
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Failed to process password reset request' });
+  }
+});
+
+// Reset password endpoint - verifies OTP and updates password
+router.post('/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { email, otp, otpSession, newPassword } = resetPasswordSchema.parse(req.body);
+    
+    const user = await UserModel.findOne({ email }).select(
+      '+otpCodeHash +otpExpiresAt +otpSession'
+    );
+
+    if (!user || !user.otpCodeHash || !user.otpExpiresAt || !user.otpSession) {
+      return res.status(400).json({ error: 'Invalid or expired reset code' });
+    }
+
+    if (user.otpSession !== otpSession) {
+      return res.status(400).json({ error: 'Invalid reset session' });
+    }
+
+    if (user.otpExpiresAt.getTime() < Date.now()) {
+      return res.status(400).json({ error: 'Reset code expired' });
+    }
+
+    const providedHash = hashOtpCode(otp);
+    if (providedHash !== user.otpCodeHash) {
+      return res.status(400).json({ error: 'Invalid reset code' });
+    }
+
+    // Update password
+    user.password = newPassword;
+    user.set({
+      otpCodeHash: undefined,
+      otpExpiresAt: undefined,
+      otpSession: undefined,
+      otpVerifiedAt: new Date(),
+    });
+    await user.save();
+
+    res.json({
+      message: 'Password reset successfully. You can now login with your new password.',
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: 'Validation error',
+        details: error.errors,
+      });
+    }
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
 export default router;
+
 
 
 

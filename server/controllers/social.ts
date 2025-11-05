@@ -362,13 +362,14 @@ export function createSocialRouter() {
         platform: string;
         difficulty: string | null;
         solvedAt: Date | null;
+        link: string | null;
       }> = [];
 
       if (canViewSensitive) {
         const recentQuestions = await Question.find({ userId: profile.id })
           .sort({ solvedAt: -1, dateSaved: -1 })
           .limit(5)
-          .select("title platform difficulty solvedAt dateSaved")
+          .select("title platform difficulty solvedAt dateSaved link source")
           .lean()
           .exec();
 
@@ -380,6 +381,7 @@ export function createSocialRouter() {
             (question.solvedAt as Date | null) ??
             (question.dateSaved as Date | null) ??
             null,
+          link: question.link ?? null,
         }));
       }
 

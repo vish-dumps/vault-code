@@ -26,40 +26,43 @@ interface Scenario {
 
 const journeyPhases: JourneyPhase[] = [
   {
-    label: "Capture",
-    title: "Collect Smart, Not Hard",
+    label: "What Is CodeVault?",
+    title: "Your Personal Coding Companion",
     description:
-      "Clip problems from any platform, store your notes, and preserve every approach in one place.",
+      "CodeVault is an app + Chrome extension that automatically tracks your solved coding problems from platforms like LeetCode, Codeforces, and Atcoder, and saves them to your GitHub repository.",
     highlights: [
-      "Use the Add Question flow to log title, link, tags, and difficulty in seconds.",
-      "Track multiple solution approaches and languages per problem.",
-      "Auto-tag with platform and difficulty to keep the vault neat.",
+      "Automatically detects solved problems and saves the code, problem name, difficulty, platform link, and date solved.",
+      "View everything on your CodeVault dashboard — neatly organized by topic, difficulty, and time.",
+      "Build a portfolio of growth — showing how far you've come, what you've learned, and what challenges you've mastered.",
     ],
     icon: Layers,
     accent: "from-purple-500/70 via-fuchsia-500/40 to-sky-500/40",
   },
   {
-    label: "Organize",
-    title: "Stay Ahead With Context",
+    label: "How It Works",
+    title: "Seamless Auto-Tracking",
     description:
-      "Transform your backlog into a curated learning map that stays searchable and filterable.",
+      "Install the Chrome Extension, log in to your CodeVault account, and solve problems normally on LeetCode or Codeforces. CodeVault does the rest!",
     highlights: [
-      "Tag family groups (graph, DP, two-pointers) for semantic search.",
-      "Use the dashboard streak + daily goals to avoid breaking momentum.",
-      "Save workspace snippets for boilerplates, patterns, and code templates.",
+      "The extension runs quietly in the background and detects when you click 'Submit' or 'Run'.",
+      "It waits for the final verdict (Accepted, Wrong Answer, etc.) — even if the platform queues submissions like Codeforces.",
+      "Then sends the result and code to your Vault automatically.",
+      "Pro Tip: Even if Codeforces takes time to judge your submission, CodeVault checks periodically until your result arrives.",
     ],
     icon: Compass,
     accent: "from-amber-400/70 via-orange-400/40 to-rose-400/40",
   },
   {
-    label: "Execute",
-    title: "Turn Practice Into Wins",
+    label: "Get the Most Out of CodeVault",
+    title: "Pro Tips for Maximum Value",
     description:
-      "Run targeted sessions, track progress, and celebrate milestones without leaving CodeVault.",
+      "Build your Vault, track progress, sync with GitHub, and engage with the community to maximize your coding journey.",
     highlights: [
-      "Drive daily focus from the Todos mini-board and productivity metrics.",
-      "Review heatmaps to spot cold streaks before they derail your prep.",
-      "Use snippets + workspace split view to rehearse interviews quickly.",
+      "Build Your 'Vault' — Think of it like your coding resume. Each problem you solve adds to your vault and XP.",
+      "Tag & Filter — Use tags like 'Dynamic Programming' or 'Arrays' to organize your practice topics.",
+      "Track Progress — Use the XP and stats system to see how consistent you are.",
+      "Sync with GitHub — Every submission automatically uploads, showing your coding streak to potential recruiters.",
+      "Review Later — Revisit older problems, see your code history, and compare with newer attempts.",
     ],
     icon: Rocket,
     accent: "from-emerald-400/70 via-teal-400/40 to-cyan-400/40",
@@ -68,27 +71,27 @@ const journeyPhases: JourneyPhase[] = [
 
 const scenarios: Scenario[] = [
   {
-    title: "Morning Warm-Up",
+    title: "The Extension — Your Hidden Superpower",
     description:
-      "Open Dashboard to review the streak, pull a question from the Questions page, and jot your approach in Workspace.",
-    cta: "Start on the Dashboard",
+      "The Chrome extension makes CodeVault feel magical. It detects when you submit on coding platforms, waits for the verdict, and automatically saves your solution to your Vault.",
+    cta: "View Dashboard",
     destination: "/",
     icon: CalendarCheck,
   },
   {
-    title: "Deep Dive Session",
+    title: "Friends, Fun, and the Social Side",
     description:
-      "Filter your vault by tag combinations (e.g., graph + shortest path) and compare stored approaches side by side.",
-    cta: "Go to Questions",
-    destination: "/questions",
+      "CodeVault isn't just a tracker — it's also about community. Add friends, compete for XP, discuss problems, and showcase achievements. Share your public vault link on LinkedIn or GitHub!",
+    cta: "View Friends",
+    destination: "/community/friends",
     icon: Search,
   },
   {
-    title: "Interview Sprint",
+    title: "Track Your Journey",
     description:
-      "Pin key snippets in Workspace, use Todos to queue problems, and capture learnings for instant recall.",
-    cta: "Open Workspace",
-    destination: "/workspace",
+      "Use the dashboard to view your streak, XP, solved problems by difficulty, and contribution heatmap. Stay motivated with daily goals and milestones.",
+    cta: "Open Dashboard",
+    destination: "/",
     icon: BookmarkCheck,
   },
 ];
@@ -152,6 +155,16 @@ export default function Guide() {
             CodeVault Playbook
           </Badge>
         </div>
+
+        {/* Scroll Prompt */}
+        <motion.div
+          {...baseMotion}
+          className="text-center py-4 px-6 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg"
+        >
+          <p className="text-sm text-muted-foreground">
+            📖 <span className="font-semibold">Welcome to the CodeVault Playbook!</span> Scroll down to explore how to get the most out of CodeVault.
+          </p>
+        </motion.div>
 
         <motion.section
           {...baseMotion}

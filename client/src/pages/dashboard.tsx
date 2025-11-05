@@ -91,10 +91,10 @@ export default function Dashboard() {
     refetchInterval: 30000,
   });
 
-  // Fetch user profile for streak
+  // Fetch user profile for streak and daily progress
   const { data: userProfile } = useQuery<any>({
     queryKey: ["/api/user/profile"],
-    refetchInterval: 60000,
+    refetchInterval: 10000, // Faster refresh for auto-tracked questions
   });
 
   const invalidateGamification = useCallback(() => {
@@ -226,17 +226,8 @@ export default function Dashboard() {
   const currentStreak = userProfile?.streak || 0;
   const streakGoal = userProfile?.streakGoal ?? 7;
   const dailyGoal = userProfile?.dailyGoal ?? 3;
-  const todaysQuestionsCount = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return questions.reduce((count, question) => {
-      if (!question.dateSaved) return count;
-      const saved = new Date(question.dateSaved);
-      saved.setHours(0, 0, 0, 0);
-      return saved.getTime() === today.getTime() ? count + 1 : count;
-    }, 0);
-  }, [questions]);
-  const dailyProgress = Math.max(userProfile?.dailyProgress ?? 0, todaysQuestionsCount);
+  // Use dailyProgress from user profile which includes both manual and auto-tracked questions
+  const dailyProgress = userProfile?.dailyProgress ?? 0;
   const hasStartedToday = dailyProgress > 0;
   const now = new Date();
   const endOfDay = new Date(now);

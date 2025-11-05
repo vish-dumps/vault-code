@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp, integer, serial, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
+import type { RewardType, RewardDefinition } from "./gamification";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -43,6 +44,9 @@ export const users = pgTable("users", {
   xpVisibility: text("xp_visibility").default("public"),
   showProgressGraphs: boolean("show_progress_graphs").default(true),
   streakReminders: boolean("streak_reminders").default(true),
+  rewardsInventory: jsonb("rewards_inventory"),
+  rewardEffects: jsonb("reward_effects"),
+  lastRewardXpCheckpoint: integer("last_reward_xp_checkpoint"),
 });
 
 export const questions = pgTable("questions", {
@@ -120,6 +124,9 @@ export const insertUserSchema = createInsertSchema(users).omit({
   xpVisibility: z.enum(["public", "private"]).optional(),
   showProgressGraphs: z.boolean().optional(),
   streakReminders: z.boolean().optional(),
+  rewardsInventory: z.any().optional(),
+  rewardEffects: z.any().optional(),
+  lastRewardXpCheckpoint: z.number().int().optional(),
 });
 
 export const insertQuestionSchema = createInsertSchema(questions).omit({
@@ -188,8 +195,41 @@ export type NotificationPreferences = {
 
 export type User = Omit<typeof users.$inferSelect, "notificationPreferences"> & {
   notificationPreferences?: NotificationPreferences | null;
+  rewardsInventory?: RewardInventoryItem[] | null;
+  rewardEffects?: RewardEffectState[] | null;
 };
 export type InsertSnippet = z.infer<typeof insertSnippetSchema>;
+
+export interface RewardInventoryItem {
+  id: string;
+  rewardId: string;
+  instanceId: string;
+  status: "available" | "consumed";
+  earnedAt: Date | string;
+  usedAt?: Date | string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface RewardEffectState {
+  id: string;
+  rewardId: string;
+  instanceId: string;
+  type: RewardType;
+  activatedAt: Date | string;
+  expiresAt?: Date | string | null;
+  usesRemaining?: number | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface RewardSummary {
+  definition: RewardDefinition;
+  inventoryItem?: RewardInventoryItem;
+  effect?: RewardEffectState;
+  instanceId: string;
+  instanceIndex?: number;
+  xpThreshold: number;
+  unlockedAt?: Date | string;
+}
 
 // Extended types for frontend
 export type QuestionWithDetails = Question & {

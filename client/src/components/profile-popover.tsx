@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { User, Settings, LogOut, Trophy, Code2, Target, Sparkles } from "lucide-react";
+import * as React from "react";
+import { User, Settings, LogOut, Trophy, Code2, Target, Sparkles, Info, MessageSquare, Heart } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,13 +16,21 @@ export function ProfilePopover() {
   const [, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
 
-  const { data: userProfile } = useQuery({
+  const { data: userProfile, refetch } = useQuery({
     queryKey: ["/api/user/profile"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/user/profile");
       return response.json();
     },
+    refetchOnWindowFocus: false,
   });
+
+  // Refetch profile data when popover opens to get real-time stats
+  React.useEffect(() => {
+    if (open) {
+      refetch();
+    }
+  }, [open, refetch]);
 
   const handleLogout = async () => {
     await logout();
@@ -34,23 +43,7 @@ export function ProfilePopover() {
     setLocation(path);
   };
 
-  const stats = [
-    {
-      icon: <Code2 className="h-4 w-4 text-blue-500" />,
-      label: "Problems Solved",
-      value: userProfile?.totalProblems ?? 0,
-    },
-    {
-      icon: <Trophy className="h-4 w-4 text-yellow-500" />,
-      label: "Current Streak",
-      value: `${userProfile?.currentStreak ?? 0} days`,
-    },
-    {
-      icon: <Target className="h-4 w-4 text-green-500" />,
-      label: "Daily Goal",
-      value: `${userProfile?.dailyGoal ?? 3} problems`,
-    },
-  ];
+  // Stats removed as per user request - XP and streak info available in profile page
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -99,26 +92,6 @@ export function ProfilePopover() {
             </div>
           </div>
 
-          {/* Quick Stats */}
-          <div className="p-3 space-y-2">
-            {stats.map((stat, index) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
-                whileHover={{ scale: 1.02, x: 4 }}
-                className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50 transition-all duration-200"
-              >
-                <div className="flex-shrink-0">{stat.icon}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground">{stat.label}</p>
-                  <p className="font-semibold text-sm">{stat.value}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
           <Separator />
 
           {/* Actions */}
@@ -146,6 +119,30 @@ export function ProfilePopover() {
             >
               <Settings className="h-4 w-4" />
               Settings
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-2 hover:bg-cyan-500/10"
+              onClick={() => handleNavigate("/about")}
+            >
+              <Info className="h-4 w-4" />
+              About
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-2 hover:bg-green-500/10"
+              onClick={() => handleNavigate("/feedback")}
+            >
+              <MessageSquare className="h-4 w-4" />
+              Feedback
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-2 hover:bg-pink-500/10"
+              onClick={() => handleNavigate("/support")}
+            >
+              <Heart className="h-4 w-4" />
+              Support Us
             </Button>
           </div>
 

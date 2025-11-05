@@ -22,6 +22,7 @@ import { Friendship } from "./models/Friendship";
 import { Notification } from "./models/Notification";
 import { User as UserModel } from "./models/User";
 import { Answer } from "./models/Answer";
+import { Feedback } from "./models/Feedback";
 import {
   XP_REWARDS,
   XP_COMBO_RULES,
@@ -37,6 +38,14 @@ import { computeWeeklyLeaderboard } from "./services/leaderboard";
 import { createAnswerRouter } from "./controllers/answers";
 import { createSocialRouter } from "./controllers/social";
 import { createNotificationsRouter } from "./controllers/notifications";
+import nodemailer from "nodemailer";
+import { createActivity } from "./services/activity";
+import {
+  applyRewardEffectsToXp,
+  syncRewardInventory,
+  activateReward,
+  buildRewardOverview,
+} from "./services/rewards";
 
 interface ContestResponse {
   id: string;
@@ -92,6 +101,101 @@ const FETCH_TIMEOUT_MS = 7000;
 const PROBLEM_SOURCE_MANUAL = "manual";
 const PROBLEM_SOURCE_AUTO = "auto" as const;
 
+function computePlatformAwareSolvedXp(
+  _platform: string | undefined | null,
+  difficulty: string | null | undefined
+) {
+  const normalizedDifficulty = difficulty?.toString().toLowerCase() ?? "medium";
+  if (normalizedDifficulty === "easy") return 40;
+  if (normalizedDifficulty === "hard") return 100;
+  return 75;
+}
+
+async function ensureDailyProgressForToday(userId: string, user?: User | undefined) {
+  let workingUser = user ?? (await mongoStorage.getUser(userId));
+  if (!workingUser) {
+    return { user: undefined, previousProgress: 0 };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const lastReset = workingUser.lastResetDate ? new Date(workingUser.lastResetDate) : null;
+  if (lastReset) {
+    lastReset.setHours(0, 0, 0, 0);
+  }
+
+  const needsReset = !lastReset || lastReset.getTime() < today.getTime();
+
+  if (needsReset) {
+    workingUser =
+      (await mongoStorage.updateUser(userId, {
+        dailyProgress: 0,
+        lastResetDate: new Date(),
+        lastPenaltyDate: null,
+      })) ?? workingUser;
+  }
+
+  return {
+    user: workingUser,
+    previousProgress: workingUser.dailyProgress ?? 0,
+  };
+}
+
+// Email configuration for feedback
+async function sendFeedbackEmail(feedback: any) {
+  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER || "codevault.updates@gmail.com";
+  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD;
+  const host = process.env.SMTP_HOST;
+  const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : undefined;
+  const secure = process.env.SMTP_SECURE !== undefined ? process.env.SMTP_SECURE === "true" : port === 465;
+
+  const transportOptions: nodemailer.TransportOptions = {};
+  if (host) {
+    transportOptions.host = host;
+    transportOptions.port = port ?? 587;
+    transportOptions.secure = secure;
+  } else {
+    transportOptions.service = process.env.SMTP_SERVICE || "gmail";
+  }
+
+  if (smtpUser && smtpPass) {
+    transportOptions.auth = {
+      user: smtpUser,
+      pass: smtpPass,
+    };
+  }
+
+  const transporter = nodemailer.createTransport(transportOptions);
+  const stars = "\u2605".repeat(Number(feedback.rating) || 0);
+  const fallbackFrom = smtpUser ? `CodeVault <${smtpUser}>` : "CodeVault Feedback <no-reply@codevault.dev>";
+
+  const mailOptions = {
+    from: process.env.SMTP_FROM || fallbackFrom,
+    to: process.env.FEEDBACK_RECEIVER_EMAIL || "vishwasthesoni@gmail.com",
+    subject: `CodeVault Feedback - ${feedback.rating ?? "N/A"}/5 - ${feedback.category ?? "general"}`,
+    html: `
+      <h2>New Feedback Received</h2>
+      <p><strong>From:</strong> ${feedback.username ?? "Anonymous"}${feedback.email ? ` (${feedback.email})` : ""}</p>
+      <p><strong>Rating:</strong> ${stars || "No rating"} (${feedback.rating ?? "N/A"}/5)</p>
+      <p><strong>Category:</strong> ${feedback.category ?? "general"}</p>
+
+      <h3>Feedback</h3>
+      <p>${feedback.feedbackText || "No feedback text provided."}</p>
+
+      ${feedback.featureSuggestions ? `<h3>Feature Suggestions</h3><p>${feedback.featureSuggestions}</p>` : ""}
+      ${feedback.bugsEncountered ? `<h3>Bugs Encountered</h3><p>${feedback.bugsEncountered}</p>` : ""}
+      ${feedback.noteForCreator ? `<h3>Note for Creator</h3><p>${feedback.noteForCreator}</p>` : ""}
+
+      <p style="margin-top:16px;font-size:12px;color:#666;">
+        Submitted at: ${new Date(feedback.createdAt ?? Date.now()).toLocaleString()}
+      </p>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+}
+
 const solvedProblemPayloadSchema = z.object({
   userId: z.string().optional(),
   platform: z.string().min(1),
@@ -102,6 +206,14 @@ const solvedProblemPayloadSchema = z.object({
   problemId: z.string().min(1),
   solvedAt: z.union([z.string(), z.date(), z.number()]).optional(),
   metadata: z.record(z.any()).optional(),
+  submission: z
+    .object({
+      code: z.string().optional(),
+      language: z.string().optional(),
+      runtime: z.string().optional(),
+      memory: z.string().optional(),
+    })
+    .optional(),
 });
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = FETCH_TIMEOUT_MS) {
@@ -213,6 +325,89 @@ function normalizeLink(link?: string | null): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function normalizeSubmissionLanguage(language?: string | null) {
+  const fallback = { value: "plaintext", label: "Plain Text" };
+  if (!language) return fallback;
+
+  const raw = language.toString().trim();
+  if (!raw) return fallback;
+
+  const value = raw.toLowerCase();
+  const directMap: Record<string, { value: string; label: string }> = {
+    python: { value: "python", label: "Python" },
+    python3: { value: "python", label: "Python" },
+    py: { value: "python", label: "Python" },
+    java: { value: "java", label: "Java" },
+    javascript: { value: "javascript", label: "JavaScript" },
+    js: { value: "javascript", label: "JavaScript" },
+    typescript: { value: "typescript", label: "TypeScript" },
+    ts: { value: "typescript", label: "TypeScript" },
+    "c++": { value: "cpp", label: "C++" },
+    cpp: { value: "cpp", label: "C++" },
+    c: { value: "c", label: "C" },
+    go: { value: "go", label: "Go" },
+    golang: { value: "go", label: "Go" },
+    rust: { value: "rust", label: "Rust" },
+    swift: { value: "swift", label: "Swift" },
+    kotlin: { value: "kotlin", label: "Kotlin" },
+    ruby: { value: "ruby", label: "Ruby" },
+    php: { value: "php", label: "PHP" },
+    scala: { value: "scala", label: "Scala" },
+    sql: { value: "sql", label: "SQL" },
+    csharp: { value: "csharp", label: "C#" },
+    "c#": { value: "csharp", label: "C#" },
+  };
+
+  if (directMap[value]) {
+    return directMap[value];
+  }
+
+  const fuzzyMap: Array<[RegExp, { value: string; label: string }]> = [
+    [/python/, { value: "python", label: "Python" }],
+    [/typescript/, { value: "typescript", label: "TypeScript" }],
+    [/javascript/, { value: "javascript", label: "JavaScript" }],
+    [/c\+\+|cpp/, { value: "cpp", label: "C++" }],
+    [/csharp|c#/, { value: "csharp", label: "C#" }],
+    [/java/, { value: "java", label: "Java" }],
+    [/golang|go/, { value: "go", label: "Go" }],
+    [/rust/, { value: "rust", label: "Rust" }],
+    [/swift/, { value: "swift", label: "Swift" }],
+    [/kotlin/, { value: "kotlin", label: "Kotlin" }],
+    [/ruby/, { value: "ruby", label: "Ruby" }],
+    [/php/, { value: "php", label: "PHP" }],
+    [/scala/, { value: "scala", label: "Scala" }],
+    [/sql/, { value: "sql", label: "SQL" }],
+  ];
+
+  for (const [pattern, match] of fuzzyMap) {
+    if (pattern.test(value)) {
+      return match;
+    }
+  }
+
+  const sanitized = value.replace(/[^a-z0-9+#]/g, "");
+  return { value: sanitized || "plaintext", label: raw };
+}
+
+function buildSubmissionNotes(
+  submission?: { runtime?: string | null; memory?: string | null },
+  metadata?: Record<string, unknown>
+) {
+  const runtime =
+    submission?.runtime ??
+    (typeof metadata?.runtime === "string" ? (metadata.runtime as string) : undefined);
+  const memory =
+    submission?.memory ??
+    (typeof metadata?.memory === "string" ? (metadata.memory as string) : undefined);
+
+  const segments = [
+    runtime ? `Runtime: ${runtime}` : null,
+    memory ? `Memory: ${memory}` : null,
+  ].filter(Boolean);
+
+  return segments.length ? segments.join(" · ") : undefined;
+}
+
 async function applyXp(
   userId: string,
   delta: number,
@@ -222,15 +417,64 @@ async function applyXp(
   const user = baseUser ?? (await mongoStorage.getUser(userId));
   if (!user) return undefined;
 
+  const safeDelta = Number.isFinite(delta) ? delta : 0;
+  const effectResult = applyRewardEffectsToXp(user, safeDelta);
+  const appliedDelta = effectResult.delta;
   const currentXp = user.xp ?? 0;
-  const nextXp = Math.max(0, currentXp + delta);
+  const nextXp = Math.max(0, currentXp + appliedDelta);
   const badgeTier = getBadgeForXp(nextXp);
 
-  return mongoStorage.updateUser(userId, {
-    xp: nextXp,
-    badge: badgeTier.name,
-    ...meta,
-  });
+  const { rewardEffects: _metaEffects, rewardsInventory: _metaInventory, ...restMeta } = meta as any;
+
+  const updatedUser =
+    (await mongoStorage.updateUser(userId, {
+      xp: nextXp,
+      badge: badgeTier.name,
+      rewardEffects: effectResult.effects,
+      ...restMeta,
+    })) ?? undefined;
+
+  if (!updatedUser) {
+    return undefined;
+  }
+
+  const syncResult = syncRewardInventory(updatedUser);
+  let finalUser = updatedUser;
+
+  if (
+    syncResult.newlyUnlocked.length > 0 ||
+    (updatedUser.rewardsInventory?.length ?? 0) !== syncResult.inventory.length ||
+    (updatedUser.lastRewardXpCheckpoint ?? 0) !== syncResult.checkpoint
+  ) {
+    finalUser =
+      (await mongoStorage.updateUser(userId, {
+        rewardsInventory: syncResult.inventory,
+        lastRewardXpCheckpoint: syncResult.checkpoint,
+      })) ?? finalUser;
+  }
+
+  if (syncResult.newlyUnlocked.length > 0) {
+    try {
+      await Notification.insertMany(
+        syncResult.newlyUnlocked.map((reward) => ({
+          userId: new Types.ObjectId(userId),
+          type: "system",
+          title: "Reward Unlocked!",
+          message: `You unlocked ${reward.definition.name}. Activate it from your XP Momentum card.`,
+          metadata: {
+            rewardId: reward.definition.id,
+            instanceId: reward.instanceId,
+            icon: reward.definition.icon,
+            description: reward.definition.description,
+          },
+        }))
+      );
+    } catch (error) {
+      console.error("Failed to create reward notification:", error);
+    }
+  }
+
+  return finalUser;
 }
 
 // Helper function to update streak on activity
@@ -247,33 +491,54 @@ async function updateStreakOnActivity(userId: string): Promise<void> {
   }
 
   let newStreak = user.streak || 0;
-  
+  let rewardEffects = Array.isArray(user.rewardEffects) ? [...user.rewardEffects] : [];
+  let effectsUpdated = false;
+
   if (!lastActive) {
-    // First time activity
     newStreak = 1;
   } else {
     const daysDiff = Math.floor((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24));
-    
+
     if (daysDiff === 0) {
-      // Same day, no change
+      await mongoStorage.updateUser(userId, {
+        lastActiveDate: new Date(),
+      });
       return;
-    } else if (daysDiff === 1) {
-      // Consecutive day
-      newStreak += 1;
+    }
+
+    if (daysDiff === 1) {
+      newStreak = (newStreak === 0 ? 1 : newStreak + 1);
     } else {
-      // Streak broken
-      newStreak = 1;
+      const freezeIndex = rewardEffects.findIndex((effect: any) => effect.type === "streak_freeze");
+      if (freezeIndex !== -1) {
+        const effect = { ...rewardEffects[freezeIndex] };
+        const remaining = (effect.usesRemaining ?? 1) - 1;
+        if (remaining <= 0) {
+          rewardEffects.splice(freezeIndex, 1);
+        } else {
+          effect.usesRemaining = remaining;
+          rewardEffects[freezeIndex] = effect;
+        }
+        effectsUpdated = true;
+        newStreak = Math.max(1, (user.streak ?? 0) + 1);
+      } else {
+        newStreak = 1;
+      }
     }
   }
 
-  // Update maxStreak if current streak is higher
   const maxStreak = Math.max(user.maxStreak || 0, newStreak);
-
-  await mongoStorage.updateUser(userId, {
+  const updatePayload: Partial<User> = {
     streak: newStreak,
     maxStreak,
-    lastActiveDate: new Date()
-  });
+    lastActiveDate: new Date(),
+  };
+
+  if (effectsUpdated) {
+    (updatePayload as any).rewardEffects = rewardEffects;
+  }
+
+  await mongoStorage.updateUser(userId, updatePayload);
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -331,14 +596,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       today.setHours(0, 0, 0, 0);
 
       const userBeforeUpdate = await mongoStorage.getUser(userId);
-      const previousProgress = userBeforeUpdate?.dailyProgress ?? 0;
-      let updatedProfile = userBeforeUpdate;
+      const { user: progressReadyUser, previousProgress } = await ensureDailyProgressForToday(
+        userId,
+        userBeforeUpdate
+      );
+      let updatedProfile = progressReadyUser ?? userBeforeUpdate;
 
-      if (userBeforeUpdate) {
+      if (updatedProfile) {
         updatedProfile =
           (await mongoStorage.updateUser(userId, {
-            dailyProgress: (userBeforeUpdate.dailyProgress || 0) + 1,
-          })) ?? userBeforeUpdate;
+            dailyProgress: (updatedProfile.dailyProgress || 0) + 1,
+          })) ?? updatedProfile;
       }
 
       updatedProfile =
@@ -368,6 +636,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      try {
+        await createActivity({
+          userId,
+          type: "question_solved",
+          summary: `Saved ${data.title}`,
+          details: {
+            platform: data.platform,
+            difficulty: data.difficulty,
+            source: createPayload.source ?? "manual",
+            xpAwarded: XP_REWARDS.manual.addQuestionToVault,
+          },
+        });
+      } catch (activityError) {
+        console.error("Failed to create activity for manual question:", activityError);
+      }
+
+      try {
+        await Notification.create({
+          userId: new Types.ObjectId(userId),
+          type: "system",
+          title: "Question Saved",
+          message: `“${data.title}” added to your vault. +${XP_REWARDS.manual.addQuestionToVault} XP`,
+          metadata: {
+            questionId: question.id,
+            platform: data.platform,
+            difficulty: data.difficulty,
+            source: createPayload.source ?? "manual",
+          },
+        });
+      } catch (notificationError) {
+        console.error("Failed to create notification for manual question:", notificationError);
+      }
+
       res.status(201).json(question);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -390,6 +691,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching solved questions:", error);
       res.status(500).json({ error: "Failed to fetch solved questions" });
+    }
+  });
+
+  app.get("/api/user/activity-heatmap", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      start.setDate(start.getDate() - 364);
+
+      const questions = await Question.find({
+        userId,
+        $or: [
+          { solvedAt: { $gte: start } },
+          { solvedAt: { $exists: false }, dateSaved: { $gte: start } },
+        ],
+      })
+        .select("solvedAt dateSaved xpAwarded source")
+        .lean()
+        .exec();
+
+      const counts = new Map<
+        string,
+        {
+          count: number;
+          xp: number;
+          sources: Set<string>;
+        }
+      >();
+
+      for (const question of questions) {
+        const date = question.solvedAt ?? question.dateSaved;
+        if (!date) continue;
+        const normalized = new Date(date);
+        if (Number.isNaN(normalized.getTime()) || normalized < start) continue;
+        normalized.setHours(0, 0, 0, 0);
+        const key = normalized.toISOString().slice(0, 10);
+        const existing = counts.get(key);
+        if (existing) {
+          existing.count += 1;
+          existing.xp += Number(question.xpAwarded ?? 0);
+          if (question.source) existing.sources.add(question.source);
+        } else {
+          counts.set(key, {
+            count: 1,
+            xp: Number(question.xpAwarded ?? 0),
+            sources: new Set<string>(question.source ? [String(question.source)] : []),
+          });
+        }
+      }
+
+      const result = Array.from(counts.entries())
+        .map(([date, info]) => ({
+          date,
+          count: info.count,
+          xp: info.xp,
+          sources: Array.from(info.sources),
+        }))
+        .sort((a, b) => (a.date > b.date ? 1 : -1));
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error building activity heatmap:", error);
+      res.status(500).json({ error: "Failed to load activity heatmap" });
     }
   });
 
@@ -419,7 +784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const userBeforeUpdate = await mongoStorage.getUser(userId);
-      const baseXp = getSolvedProblemXp(difficulty);
+      const baseXp = computePlatformAwareSolvedXp(platform, difficulty);
       const progressive = applyProgressiveScaling(baseXp, userBeforeUpdate?.xp ?? 0);
       const progressiveXp = progressive.adjustedXp;
 
@@ -457,21 +822,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         approaches: [],
       };
 
+      if (payload.submission?.code && payload.submission.code.trim().length > 0) {
+        const submissionLanguage =
+          payload.submission.language ??
+          (typeof payload.metadata?.language === "string" ? payload.metadata.language : undefined);
+        const languageInfo = normalizeSubmissionLanguage(submissionLanguage);
+        const submissionNotes = buildSubmissionNotes(payload.submission, payload.metadata);
+        createPayload.approaches = [
+          {
+            name: `${languageInfo.label} Submission`,
+            language: languageInfo.value,
+            code: payload.submission.code.trimEnd(),
+            notes: submissionNotes,
+          },
+        ];
+      }
+
       const question = await mongoStorage.createQuestion(createPayload, userId);
 
+      // Auto-tracked questions also count toward streak and daily progress
       await updateStreakOnActivity(userId);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const previousProgress = userBeforeUpdate?.dailyProgress ?? 0;
-      let updatedProfile = userBeforeUpdate;
+      const { user: progressReadyUser, previousProgress } = await ensureDailyProgressForToday(
+        userId,
+        userBeforeUpdate
+      );
+      let updatedProfile = progressReadyUser ?? userBeforeUpdate;
 
-      if (userBeforeUpdate) {
+      if (updatedProfile) {
         updatedProfile =
           (await mongoStorage.updateUser(userId, {
-            dailyProgress: (userBeforeUpdate.dailyProgress || 0) + 1,
-          })) ?? userBeforeUpdate;
+            dailyProgress: (updatedProfile.dailyProgress || 0) + 1,
+          })) ?? updatedProfile;
       }
 
       let goalBonusAwarded = 0;
@@ -483,6 +868,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
           { lastSolveAt: solvedAt, solveComboCount: comboCount },
           updatedProfile
         )) ?? updatedProfile;
+
+      // Create activity for auto-tracked question
+      try {
+        await createActivity({
+          userId,
+          type: 'question_solved',
+          summary: `Solved ${payload.title}`,
+          details: {
+            platform,
+            difficulty,
+            source: 'auto',
+            xpAwarded: totalXpAward,
+          },
+        });
+      } catch (activityError) {
+        console.error("Failed to create activity for auto-tracked question:", activityError);
+      }
+
+      // Create notification for auto-tracked question
+      try {
+        await Notification.create({
+          userId: new Types.ObjectId(userId),
+          type: 'achievement',
+          title: "Problem Solved!",
+          message: `You solved "${payload.title}" on ${platform}. +${totalXpAward} XP`,
+          read: false,
+          metadata: {
+            questionId: question.id,
+            platform,
+            difficulty,
+            xpAwarded: totalXpAward,
+            source: 'auto',
+          },
+        });
+      } catch (notificationError) {
+        console.error("Failed to create notification for auto-tracked question:", notificationError);
+      }
 
       if (updatedProfile) {
         const goal = updatedProfile.dailyGoal ?? 0;
@@ -518,7 +940,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           bonusXp: combo.bonusXp
         },
         progressionMultiplier: progressive.multiplier,
-        comboMultiplier: combo.multiplier
+        comboMultiplier: combo.multiplier,
+        updatedProfile: {
+          xp: updatedProfile?.xp ?? 0,
+          dailyProgress: updatedProfile?.dailyProgress ?? 0,
+          streak: updatedProfile?.streak ?? 0,
+        }
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -730,6 +1157,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           lastResetDate: new Date(),
           lastPenaltyDate: null,
         });
+      }
+
+      if (user?.lastActiveDate) {
+        const lastActive = new Date(user.lastActiveDate);
+        lastActive.setHours(0, 0, 0, 0);
+        const diffDays = Math.floor((today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (
+          diffDays > 1 &&
+          (user.streak ?? 0) > 0 &&
+          !(Array.isArray(user.rewardEffects) && user.rewardEffects.some((effect: any) => effect.type === "streak_freeze"))
+        ) {
+          user =
+            (await mongoStorage.updateUser(userId, {
+              streak: 0,
+            })) ?? user;
+        }
       }
       
       res.json(user);
@@ -956,6 +1400,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
+      let rewardAwareUser = user;
+      const rewardSync = syncRewardInventory(user);
+      if (
+        rewardSync.newlyUnlocked.length > 0 ||
+        (user.rewardsInventory?.length ?? 0) !== rewardSync.inventory.length ||
+        (user.lastRewardXpCheckpoint ?? 0) !== rewardSync.checkpoint
+      ) {
+        rewardAwareUser =
+          (await mongoStorage.updateUser(userId, {
+            rewardsInventory: rewardSync.inventory,
+            lastRewardXpCheckpoint: rewardSync.checkpoint,
+          })) ?? rewardAwareUser;
+
+        if (rewardSync.newlyUnlocked.length > 0) {
+          try {
+            await Notification.insertMany(
+              rewardSync.newlyUnlocked.map((reward) => ({
+                userId: new Types.ObjectId(userId),
+                type: "reward",
+                title: "Reward Unlocked!",
+                message: `You unlocked ${reward.definition.name}. Activate it from your XP Momentum card.`,
+                metadata: {
+                  rewardId: reward.definition.id,
+                  instanceId: reward.instanceId,
+                  icon: reward.definition.icon,
+                  description: reward.definition.description,
+                },
+              }))
+            );
+          } catch (rewardNotificationError) {
+            console.error("Failed to notify about new rewards:", rewardNotificationError);
+          }
+        }
+      }
+
+      const rewardsOverview = buildRewardOverview(rewardAwareUser);
+
+      const recentXpEntries = await Question.find({ userId })
+        .sort({ solvedAt: -1, dateSaved: -1 })
+        .limit(6)
+        .select("title platform difficulty solvedAt dateSaved xpAwarded source link")
+        .lean();
+
+      const xpHistory = recentXpEntries.map((entry) => {
+        const timestamp =
+          (entry.solvedAt as Date | null) ??
+          (entry.dateSaved as Date | null) ??
+          new Date();
+
+        return {
+          id: entry._id?.toString() ?? `${entry.title}-${timestamp.toISOString()}`,
+          title: entry.title,
+          platform: entry.platform ?? "Unknown",
+          xp: entry.xpAwarded ?? 0,
+          timestamp: timestamp.toISOString(),
+          difficulty: entry.difficulty ?? null,
+          type: entry.source === PROBLEM_SOURCE_AUTO ? "auto" : "manual",
+          link: entry.link ?? null,
+        };
+      });
+
+      if (goalAchievedToday) {
+        xpHistory.unshift({
+          id: `goal-${today.getTime()}`,
+          title: "Daily goal bonus",
+          platform: "CodeVault",
+          xp: XP_REWARDS.dailyGoalBonus,
+          timestamp: new Date().toISOString(),
+          difficulty: null,
+          type: "goal",
+          link: null,
+        });
+      }
+
       res.json({
         xp,
         badgeTier,
@@ -1026,10 +1544,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
           projectedNegative,
         },
         suggestions,
+        rewards: rewardsOverview,
+        xpHistory,
       });
     } catch (error) {
       console.error("Error building gamification summary:", error);
       res.status(500).json({ error: "Failed to load gamification summary" });
+    }
+  });
+
+  app.post("/api/user/rewards/:instanceId/use", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const instanceId = req.params.instanceId;
+
+      const user = await mongoStorage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const activation = activateReward(user, instanceId);
+      if (!activation) {
+        return res.status(400).json({ error: "Reward not available" });
+      }
+
+      let updatedUser =
+        (await mongoStorage.updateUser(userId, {
+          rewardsInventory: activation.inventory,
+          rewardEffects: activation.effects,
+        })) ?? user;
+
+      let instantXpAwarded = 0;
+      if (activation.instantXp && activation.instantXp > 0) {
+        instantXpAwarded = activation.instantXp;
+        updatedUser =
+          (await applyXp(
+            userId,
+            activation.instantXp,
+            {},
+            updatedUser
+          )) ?? updatedUser;
+      }
+
+      const overview = buildRewardOverview(updatedUser);
+
+      res.json({
+        success: true,
+        reward: {
+          id: activation.definition.id,
+          name: activation.definition.name,
+          description: activation.definition.description,
+          icon: activation.definition.icon,
+          type: activation.definition.type,
+        },
+        instanceId: activation.instanceId,
+        instantXp: instantXpAwarded,
+        inventory: updatedUser.rewardsInventory ?? [],
+        effects: updatedUser.rewardEffects ?? [],
+        overview,
+      });
+    } catch (error) {
+      console.error("Error activating reward:", error);
+      res.status(500).json({ error: "Failed to activate reward" });
     }
   });
 
@@ -1296,6 +1872,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating goals:", error);
       res.status(500).json({ error: "Failed to update goals" });
+    }
+  });
+
+  // Feedback routes
+  app.post("/api/feedback", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await mongoStorage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const {
+        rating,
+        feedbackText,
+        featureSuggestions,
+        bugsEncountered,
+        noteForCreator,
+        category
+      } = req.body;
+
+      if (!rating || !feedbackText) {
+        return res.status(400).json({ error: "Rating and feedback text are required" });
+      }
+
+      const feedback = new Feedback({
+        userId: new Types.ObjectId(userId),
+        username: user.username,
+        email: user.email,
+        rating,
+        feedbackText,
+        featureSuggestions,
+        bugsEncountered,
+        noteForCreator,
+        category: category || "general",
+        status: "new"
+      });
+
+      await feedback.save();
+
+      // Send email notification to creator
+      try {
+        await sendFeedbackEmail(feedback);
+      } catch (emailError) {
+        console.error("Failed to send feedback email:", emailError);
+        // Don't fail the request if email fails
+      }
+
+      res.status(201).json({
+        message: "Feedback submitted successfully",
+        feedback: {
+          id: feedback._id,
+          rating: feedback.rating,
+          createdAt: feedback.createdAt
+        }
+      });
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+      res.status(500).json({ error: "Failed to submit feedback" });
+    }
+  });
+
+  app.get("/api/feedback", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const feedbacks = await Feedback.find({ userId })
+        .sort({ createdAt: -1 })
+        .select("-__v");
+      
+      res.json(feedbacks);
+    } catch (error) {
+      console.error("Error fetching feedback:", error);
+      res.status(500).json({ error: "Failed to fetch feedback" });
+    }
+  });
+
+  // Poke/Ping friend to maintain streak
+  app.post("/api/friends/:friendId/poke", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const { friendId } = req.params;
+      const { message } = req.body;
+
+      const user = await mongoStorage.getUser(userId);
+      const friend = await mongoStorage.getUser(friendId);
+
+      if (!user || !friend) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Check if they are friends
+      const friendship = await Friendship.findOne({
+        $or: [
+          { requesterId: new Types.ObjectId(userId), recipientId: new Types.ObjectId(friendId), status: "accepted" },
+          { requesterId: new Types.ObjectId(friendId), recipientId: new Types.ObjectId(userId), status: "accepted" }
+        ]
+      });
+
+      if (!friendship) {
+        return res.status(403).json({ error: "You can only poke friends" });
+      }
+
+      // Create notification
+      const notification = new Notification({
+        userId: new Types.ObjectId(friendId),
+        type: "streak_reminder",
+        title: "Streak Reminder! 🔥",
+        message: message || `${user.username} is reminding you to maintain your streak!`,
+        metadata: {
+          fromUserId: userId,
+          fromUsername: user.username,
+          customMessage: message
+        }
+      });
+
+      await notification.save();
+
+      res.json({
+        success: true,
+        message: "Poke sent successfully"
+      });
+    } catch (error) {
+      console.error("Error sending poke:", error);
+      res.status(500).json({ error: "Failed to send poke" });
     }
   });
 

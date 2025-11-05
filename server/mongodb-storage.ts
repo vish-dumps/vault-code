@@ -252,6 +252,71 @@ export class MongoStorage implements IStorage {
       userDoc.randomAvatarSeed = data.randomAvatarSeed ?? null;
     }
 
+    if (data.streak !== undefined) {
+      userDoc.streak = Math.max(0, Number(data.streak) || 0);
+    }
+
+    if (data.maxStreak !== undefined) {
+      userDoc.maxStreak = Math.max(userDoc.streak ?? 0, Number(data.maxStreak) || 0);
+    }
+
+    if (data.streakGoal !== undefined) {
+      userDoc.streakGoal = Math.max(0, Number(data.streakGoal) || 0);
+    }
+
+    if (data.dailyGoal !== undefined) {
+      userDoc.dailyGoal = Math.max(0, Number(data.dailyGoal) || 0);
+    }
+
+    if (data.dailyProgress !== undefined) {
+      userDoc.dailyProgress = Math.max(0, Number(data.dailyProgress) || 0);
+    }
+
+    if (data.lastActiveDate !== undefined) {
+      userDoc.lastActiveDate = data.lastActiveDate ? new Date(data.lastActiveDate) : undefined;
+    }
+
+    if (data.lastResetDate !== undefined) {
+      userDoc.lastResetDate = data.lastResetDate ? new Date(data.lastResetDate) : undefined;
+    }
+
+    if (data.lastGoalAwardDate !== undefined) {
+      userDoc.lastGoalAwardDate = data.lastGoalAwardDate ? new Date(data.lastGoalAwardDate) : undefined;
+    }
+
+    if (data.lastPenaltyDate !== undefined) {
+      userDoc.lastPenaltyDate = data.lastPenaltyDate ? new Date(data.lastPenaltyDate) : undefined;
+    }
+
+    if (data.lastSolveAt !== undefined) {
+      userDoc.lastSolveAt = data.lastSolveAt ? new Date(data.lastSolveAt) : undefined;
+    }
+
+    if (data.solveComboCount !== undefined) {
+      userDoc.solveComboCount = Math.max(0, Number(data.solveComboCount) || 0);
+    }
+
+    if (data.xp !== undefined) {
+      const numericXp = Math.max(0, Number(data.xp) || 0);
+      userDoc.xp = numericXp;
+    }
+
+    if (data.badge !== undefined) {
+      userDoc.badge = data.badge ?? userDoc.badge;
+    }
+
+    if (data.rewardsInventory !== undefined && Array.isArray(data.rewardsInventory)) {
+      userDoc.rewardsInventory = data.rewardsInventory as any;
+    }
+
+    if (data.rewardEffects !== undefined && Array.isArray(data.rewardEffects)) {
+      userDoc.rewardEffects = data.rewardEffects as any;
+    }
+
+    if (data.lastRewardXpCheckpoint !== undefined) {
+      userDoc.lastRewardXpCheckpoint = Number(data.lastRewardXpCheckpoint) || 0;
+    }
+
     await userDoc.save();
 
     const fresh = await UserModel.findById(id).select('-password');
@@ -535,6 +600,30 @@ export class MongoStorage implements IStorage {
       xpVisibility: user.xpVisibility ?? "public",
       showProgressGraphs: user.showProgressGraphs ?? true,
       streakReminders: user.streakReminders ?? true,
+      rewardsInventory: user.rewardsInventory
+        ? user.rewardsInventory.map((item: any) => ({
+            id: item.id ?? item.instanceId ?? item.rewardId,
+            rewardId: item.rewardId,
+            instanceId: item.instanceId ?? item.id ?? item.rewardId,
+            status: item.status ?? "available",
+            earnedAt: item.earnedAt ?? user.createdAt,
+            usedAt: item.usedAt ?? null,
+            metadata: item.metadata ?? null,
+          }))
+        : [],
+      rewardEffects: user.rewardEffects
+        ? user.rewardEffects.map((effect: any) => ({
+            id: effect.id ?? effect.instanceId ?? effect.rewardId,
+            rewardId: effect.rewardId,
+            instanceId: effect.instanceId ?? effect.id ?? effect.rewardId,
+            type: effect.type,
+            activatedAt: effect.activatedAt ?? user.createdAt,
+            expiresAt: effect.expiresAt ?? null,
+            usesRemaining: effect.usesRemaining ?? null,
+            metadata: effect.metadata ?? null,
+          }))
+        : [],
+      lastRewardXpCheckpoint: user.lastRewardXpCheckpoint ?? user.xp ?? 0,
     };
   }
 
@@ -596,6 +685,7 @@ export class MongoStorage implements IStorage {
 }
 
 export const mongoStorage = new MongoStorage();
+
 
 
 

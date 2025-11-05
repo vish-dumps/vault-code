@@ -71,6 +71,8 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   updateUser: (updates: Partial<User>) => void;
+  requestPasswordReset: (email: string) => Promise<{ otpSession?: string; expiresIn?: number }>;
+  resetPassword: (email: string, otp: string, otpSession: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -307,6 +309,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
     });
   };
 
+  const requestPasswordReset = async (email: string) => {
+    try {
+      const response = await apiRequest('POST', '/api/auth/forgot-password', { email });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body?.error || 'Failed to request password reset');
+      }
+      return {
+        otpSession: body?.otpSession as string | undefined,
+        expiresIn: body?.expiresIn as number | undefined,
+      };
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      throw error;
+    }
+  };
+
+  const resetPassword = async (email: string, otp: string, otpSession: string, newPassword: string) => {
+    try {
+      const response = await apiRequest('POST', '/api/auth/reset-password', {
+        email,
+        otp,
+        otpSession,
+        newPassword,
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body?.error || 'Failed to reset password');
+      }
+    } catch (error) {
+      console.error('Reset password error:', error);
+      throw error;
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('authToken');
     setToken(null);
@@ -325,6 +362,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isLoading,
     isAuthenticated: !!user && !!token,
     updateUser: updateUserProfile,
+    requestPasswordReset,
+    resetPassword,
   };
 
   return (
@@ -335,6 +374,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 }
 
 export type { LoginResult };
+
 
 
 
