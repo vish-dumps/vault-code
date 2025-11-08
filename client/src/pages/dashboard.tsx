@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { CheckCircle, Flame, TrendingUp, Plus, FileCode, Code2, Trash2, CheckSquare, Square, Settings, GripVertical, Clock, Circle } from "lucide-react";
+import { CheckCircle, Flame, TrendingUp, Plus, Code2, Trash2, CheckSquare, Square, Settings, GripVertical, Clock, Circle } from "lucide-react";
 import { StatsCard } from "@/components/stats-card";
 import { StatsCardWithProgress } from "@/components/stats-card-with-progress";
 import { ContestList } from "@/components/contest-list";
@@ -76,12 +76,6 @@ export default function Dashboard() {
   // Fetch topic progress
   const { data: topicProgress = [] } = useQuery<TopicProgress[]>({
     queryKey: ["/api/topics"],
-    refetchInterval: 60000,
-  });
-
-  // Fetch snippets count
-  const { data: snippets = [] } = useQuery<any[]>({
-    queryKey: ["/api/snippets"],
     refetchInterval: 60000,
   });
 
@@ -194,6 +188,7 @@ export default function Dashboard() {
 
   // Calculate stats from questions
   const totalProblems = questions.length;
+  const totalSolved = userProfile?.stats?.totalSolved ?? totalProblems;
   
   // Calculate top topic from actual question tags
   const getTopTopic = () => {
@@ -598,7 +593,7 @@ export default function Dashboard() {
             </Tooltip>
             </motion.div>
 
-            {/* Code Snippets - Square */}
+            {/* Questions Solved - Square */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -607,17 +602,17 @@ export default function Dashboard() {
             >
             <Tooltip>
               <TooltipTrigger asChild>
-                <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/20 dark:to-purple-900/10 hover:shadow-2xl transition-all duration-300 border-purple-200/50 dark:border-purple-800/30 h-full">
+                <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/20 dark:to-emerald-900/10 hover:shadow-2xl transition-all duration-300 border-emerald-200/50 dark:border-emerald-800/30 h-full">
                   <CardContent className="p-4 h-full flex flex-col items-center justify-center text-center">
-                <FileCode className="h-6 w-6 text-purple-500 mb-2" />
-                <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{snippets.length}</div>
-                <p className="text-xs font-semibold mt-1">Code Snippets</p>
-                <p className="text-xs text-muted-foreground font-medium">Saved</p>
+                <CheckCircle className="h-6 w-6 text-emerald-500 mb-2" />
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{totalSolved}</div>
+                <p className="text-xs font-semibold mt-1">Questions Solved</p>
+                <p className="text-xs text-muted-foreground font-medium">All time</p>
                   </CardContent>
                 </Card>
               </TooltipTrigger>
               <TooltipContent>
-                <div className="text-xs">Total snippets saved</div>
+                <div className="text-xs">Lifetime total of completed questions</div>
               </TooltipContent>
             </Tooltip>
             </motion.div>

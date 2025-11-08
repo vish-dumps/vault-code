@@ -26,14 +26,6 @@ const elements = {
   loadingCard: document.getElementById("loading-card"),
   authSection: document.getElementById("auth-section"),
   mainSection: document.getElementById("main-section"),
-  loginForm: document.getElementById("login-form"),
-  loginEmail: document.getElementById("login-email"),
-  loginPassword: document.getElementById("login-password"),
-  loginOtp: document.getElementById("login-otp"),
-  otpContainer: document.getElementById("otp-container"),
-  loginSubmit: document.getElementById("login-submit"),
-  loginSpinner: document.querySelector("#login-submit .spinner"),
-  loginLabel: document.querySelector("#login-submit .label"),
   importFromTab: document.getElementById("import-from-tab"),
   logoutButton: document.getElementById("logout-button"),
   openAppButton: document.getElementById("open-app"),
@@ -50,7 +42,6 @@ const state = {
   apiBaseUrl: DEFAULT_API_BASE,
   authToken: null,
   user: null,
-  otpSession: null,
   lastScrapedData: null,
   currentTabId: null,
   autoTrackEnabled: true,
@@ -85,7 +76,6 @@ function wireEventHandlers() {
   elements.refreshProblem?.addEventListener("click", hydrateFromActiveTab);
   elements.saveSettings?.addEventListener("click", handleSaveSettings);
   elements.clearSettings?.addEventListener("click", handleClearSettings);
-  elements.loginForm?.addEventListener("submit", handleLoginSubmit);
   elements.importFromTab?.addEventListener("click", handleImportFromTab);
   elements.logoutButton?.addEventListener("click", handleLogout);
   elements.openAppButton?.addEventListener("click", handleOpenApp);
@@ -157,11 +147,6 @@ async function ensureAuthentication() {
 function resetAuthState() {
   state.authToken = null;
   state.user = null;
-  state.otpSession = null;
-  elements.loginPassword.value = "";
-  elements.loginOtp.value = "";
-  elements.otpContainer.classList.add("hidden");
-  updateLoginButton("Sign In");
   state.autoTrackEnabled = false;
   state.recentSolved = [];
   if (elements.autoTrackToggle) {
@@ -171,6 +156,7 @@ function resetAuthState() {
   renderRecentSolved([]);
   updateAutoTrackStatus(false, [], "Sign in to enable auto tracking.");
 }
+
 
 async function verifyToken(token) {
   try {
@@ -611,88 +597,6 @@ async function handleClearSettings(event) {
   showBanner("Settings reset.", "success");
 }
 
-async function handleLoginSubmit(event) {
-  event.preventDefault();
-
-  const email = elements.loginEmail.value.trim();
-  const password = elements.loginPassword.value;
-  const otp = elements.loginOtp.value.trim();
-
-  if (!email || (!password && !state.otpSession)) {
-    showBanner("Enter your email and password.", "error");
-    return;
-  }
-
-  toggleLoginState(true);
-
-  try {
-    if (state.otpSession) {
-      await verifyOtp(email, otp);
-    } else {
-      await attemptLogin(email, password);
-    }
-  } catch (error) {
-    showBanner(error.message || "Authentication failed.", "error");
-  } finally {
-    toggleLoginState(false);
-  }
-}
-
-async function attemptLogin(email, password) {
-  const endpoint = new URL("/api/auth/login", state.apiBaseUrl).toString();
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password })
-  });
-
-  const data = await safeParseJson(response);
-
-  if (!response.ok) {
-    throw new Error(data?.error || "Login failed.");
-  }
-
-  if (data?.otpRequired) {
-    state.otpSession = data.otpSession;
-    elements.otpContainer.classList.remove("hidden");
-    elements.loginOtp.focus();
-    updateLoginButton("Verify Code");
-    showBanner("Enter the verification code sent to your email.", "success");
-    return;
-  }
-
-  await finalizeAuth(data.token, data.user);
-}
-
-async function verifyOtp(email, otp) {
-  if (!otp) {
-    throw new Error("Enter the verification code.");
-  }
-
-  const endpoint = new URL("/api/auth/login/verify", state.apiBaseUrl).toString();
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email,
-      otp,
-      otpSession: state.otpSession
-    })
-  });
-
-  const data = await safeParseJson(response);
-  if (!response.ok) {
-    throw new Error(data?.error || "OTP verification failed.");
-  }
-
-  state.otpSession = null;
-  elements.otpContainer.classList.add("hidden");
-  elements.loginOtp.value = "";
-  updateLoginButton("Sign In");
-
-  await finalizeAuth(data.token, data.user);
-}
-
 async function finalizeAuth(token, user) {
   state.authToken = token;
   state.user = user ? mapUser(user) : state.user;
@@ -893,22 +797,6 @@ function resolveDifficultyState(platform, metadata = {}, overrideValue = "auto")
     hint,
     normalized: normalizedAuto
   };
-}
-
-function toggleLoginState(isLoading) {
-  elements.loginSubmit.disabled = isLoading;
-  elements.loginSpinner.classList.toggle("hidden", !isLoading);
-  elements.loginLabel.textContent = isLoading
-    ? state.otpSession
-      ? "Verifying..."
-      : "Signing in..."
-    : state.otpSession
-      ? "Verify Code"
-      : "Sign In";
-}
-
-function updateLoginButton(text) {
-  elements.loginLabel.textContent = text;
 }
 
 function showBanner(message, variant) {

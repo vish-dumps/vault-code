@@ -24,7 +24,7 @@ The feedback system in CodeVault allows users to submit feedback, bug reports, f
 
 ### 3. Email Notifications
 - Uses **nodemailer** with Gmail
-- Sends formatted emails to: `codevault.updates@gmail.com`
+- Sends formatted emails from: `codevault.updates@gmail.com` to: `vishwasthesoni@gmail.com`
 - Email includes:
   - User's username and email
   - Rating (with star emojis)

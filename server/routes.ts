@@ -38,7 +38,7 @@ import { computeWeeklyLeaderboard } from "./services/leaderboard";
 import { createAnswerRouter } from "./controllers/answers";
 import { createSocialRouter } from "./controllers/social";
 import { createNotificationsRouter } from "./controllers/notifications";
-import nodemailer from "nodemailer";
+import { hasConfiguredSmtp, sendEmailThroughSmtp } from "./services/email";
 import { createActivity } from "./services/activity";
 import {
   applyRewardEffectsToXp,
@@ -144,35 +144,15 @@ async function ensureDailyProgressForToday(userId: string, user?: User | undefin
 
 // Email configuration for feedback
 async function sendFeedbackEmail(feedback: any) {
-  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER || "codevault.updates@gmail.com";
-  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD;
-  const host = process.env.SMTP_HOST;
-  const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : undefined;
-  const secure = process.env.SMTP_SECURE !== undefined ? process.env.SMTP_SECURE === "true" : port === 465;
-
-  const transportOptions: nodemailer.TransportOptions = {};
-  if (host) {
-    transportOptions.host = host;
-    transportOptions.port = port ?? 587;
-    transportOptions.secure = secure;
-  } else {
-    transportOptions.service = process.env.SMTP_SERVICE || "gmail";
+  if (!hasConfiguredSmtp()) {
+    throw new Error("SMTP email transport is not configured. Cannot send feedback email.");
   }
 
-  if (smtpUser && smtpPass) {
-    transportOptions.auth = {
-      user: smtpUser,
-      pass: smtpPass,
-    };
-  }
+  const receiverEmail = process.env.FEEDBACK_RECEIVER_EMAIL || "vishwasthesoni@gmail.com";
 
-  const transporter = nodemailer.createTransport(transportOptions);
   const stars = "\u2605".repeat(Number(feedback.rating) || 0);
-  const fallbackFrom = smtpUser ? `CodeVault <${smtpUser}>` : "CodeVault Feedback <no-reply@codevault.dev>";
-
   const mailOptions = {
-    from: process.env.SMTP_FROM || fallbackFrom,
-    to: process.env.FEEDBACK_RECEIVER_EMAIL || "vishwasthesoni@gmail.com",
+    to: receiverEmail,
     subject: `CodeVault Feedback - ${feedback.rating ?? "N/A"}/5 - ${feedback.category ?? "general"}`,
     html: `
       <h2>New Feedback Received</h2>
@@ -193,7 +173,7 @@ async function sendFeedbackEmail(feedback: any) {
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmailThroughSmtp(mailOptions);
 }
 
 const solvedProblemPayloadSchema = z.object({

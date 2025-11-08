@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import nodemailer, { type SendMailOptions } from "nodemailer";
 import { Resend } from "resend";
 
 const resendApiKey = process.env.RESEND_API_KEY;
@@ -46,6 +46,21 @@ if (resendApiKey) {
   resendClient = new Resend(resendApiKey);
 }
 
+export function hasConfiguredSmtp(): boolean {
+  return Boolean(smtpTransporter);
+}
+
+export async function sendEmailThroughSmtp(options: SendMailOptions): Promise<void> {
+  if (!smtpTransporter) {
+    throw new Error("SMTP transporter is not configured");
+  }
+
+  await smtpTransporter.sendMail({
+    from: options.from ?? smtpFrom,
+    ...options,
+  });
+}
+
 interface SendOtpOptions {
   to: string;
   code: string;
@@ -74,8 +89,7 @@ export async function sendOtpEmail({ to, code, expiresAt }: SendOtpOptions): Pro
 
   if (smtpTransporter) {
     try {
-      await smtpTransporter.sendMail({
-        from: smtpFrom,
+      await sendEmailThroughSmtp({
         to,
         subject,
         html,

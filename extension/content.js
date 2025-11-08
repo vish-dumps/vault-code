@@ -63,6 +63,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
 async function scrapeLeetCode() {
   const link = window.location.href;
+  const slug = extractLeetCodeSlug(link);
   const result = {
     platform: "LeetCode",
     link,
@@ -73,6 +74,10 @@ async function scrapeLeetCode() {
     metadata: {}
   };
 
+  if (slug) {
+    result.metadata.slug = slug;
+  }
+
   const questionData = extractLeetCodeQuestionData();
 
   if (questionData) {
@@ -80,6 +85,9 @@ async function scrapeLeetCode() {
     result.title = questionData.title || "";
     result.metadata.difficulty = normalizedDifficulty || questionData.difficulty || "Unknown";
     result.metadata.displayDifficulty = normalizedDifficulty || questionData.difficulty || "Unknown";
+    if (questionData.questionId) {
+      result.metadata.questionId = questionData.questionId;
+    }
     const tagNames = (questionData.topicTags || [])
       .map((tag) => tag.name || tag.slug || "")
       .filter(Boolean);
@@ -97,6 +105,38 @@ async function scrapeLeetCode() {
   const editorPayload = await requestEditorPayload();
   result.code = editorPayload.code || extractLeetCodeDomCode();
   result.metadata.language = editorPayload.language || detectLeetCodeLanguage();
+
+  const requiresRemoteMeta =
+    (!!slug &&
+      (
+        !result.metadata.difficulty ||
+        result.metadata.difficulty === "Unknown" ||
+        !result.title ||
+        result.tags.length === 0
+      ));
+
+  if (requiresRemoteMeta && slug) {
+    const remoteMeta = await fetchLeetCodeQuestionMetadata(slug);
+    if (remoteMeta) {
+      if (!result.title && remoteMeta.title) {
+        result.title = remoteMeta.title;
+      }
+      const normalizedRemoteDifficulty = normalizeLeetCodeDifficultyLabel(remoteMeta.difficulty);
+      if (normalizedRemoteDifficulty) {
+        result.metadata.difficulty = normalizedRemoteDifficulty;
+        result.metadata.displayDifficulty = normalizedRemoteDifficulty;
+      } else if (remoteMeta.difficulty) {
+        result.metadata.difficulty = remoteMeta.difficulty;
+        result.metadata.displayDifficulty = remoteMeta.difficulty;
+      }
+      if (remoteMeta.tags?.length) {
+        result.tags = uniqueStrings([...result.tags, ...remoteMeta.tags]);
+      }
+      if (remoteMeta.questionId && !result.metadata.questionId) {
+        result.metadata.questionId = remoteMeta.questionId;
+      }
+    }
+  }
 
   if (!result.metadata.difficulty || result.metadata.difficulty === "Unknown") {
     result.metadata.difficulty = detectLeetCodeDifficulty();
@@ -198,6 +238,76 @@ function findNestedQuestion(value, depth = 0) {
   }
 
   return null;
+}
+
+function extractLeetCodeSlug(url = window.location.href) {
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const problemsIndex = segments.indexOf("problems");
+    if (problemsIndex !== -1 && segments[problemsIndex + 1]) {
+      return segments[problemsIndex + 1].toLowerCase();
+    }
+  } catch {
+    // ignore malformed URLs
+  }
+  return "";
+}
+
+async function fetchLeetCodeQuestionMetadata(slug) {
+  const csrf = getCookieValue("csrftoken");
+  try {
+    const response = await fetch("https://leetcode.com/graphql", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(csrf ? { "x-csrftoken": csrf } : {}),
+        Referer: `https://leetcode.com/problems/${slug}/`
+      },
+      body: JSON.stringify({
+        query: `query questionData($titleSlug: String!) {
+          question(titleSlug: $titleSlug) {
+            questionId
+            title
+            difficulty
+            topicTags {
+              name
+              slug
+            }
+          }
+        }`,
+        variables: { titleSlug: slug }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("GraphQL request failed");
+    }
+
+    const body = await response.json();
+    const question = body?.data?.question;
+    if (question) {
+      return {
+        title: question.title,
+        difficulty: question.difficulty,
+        tags: (question.topicTags || [])
+          .map((tag) => tag?.name || tag?.slug || "")
+          .filter(Boolean),
+        questionId: question.questionId
+      };
+    }
+  } catch (error) {
+    console.debug("LeetCode metadata fetch failed:", error?.message || error);
+  }
+
+  return null;
+}
+
+function getCookieValue(name) {
+  const pattern = new RegExp(`(?:^|; )${name}=([^;]*)`);
+  const match = document.cookie.match(pattern);
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 async function requestEditorPayload(target) {

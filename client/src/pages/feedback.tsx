@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Star, Send, MessageSquare, Bug, Lightbulb, Heart } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Feedback() {
   const { toast } = useToast();
@@ -20,17 +21,7 @@ export default function Feedback() {
 
   const submitFeedback = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to submit feedback");
-      }
-
+      const response = await apiRequest("POST", "/api/feedback", data);
       return response.json();
     },
     onSuccess: () => {
