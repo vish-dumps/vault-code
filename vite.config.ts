@@ -28,6 +28,15 @@ export default defineConfig({
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
+    dedupe: ["react", "react-dom", "react/jsx-runtime"],
+  },
+  optimizeDeps: {
+    include: ["react", "react-dom", "react/jsx-runtime"],
+    force: true,
+  },
+  define: {
+    // Fix for Excalidraw - define process.env
+    'process.env': {},
   },
   root: path.resolve(import.meta.dirname, "client"),
   build: {

@@ -81,6 +81,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // Create new user
     const randomAvatarSeed = Date.now();
+    console.log(`[Auth] Creating new user with email: ${email}`);
     const user = new UserModel({
       username,
       email,
@@ -92,6 +93,7 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     await user.save();
+    console.log(`[Auth] User saved. User email from DB: ${user.email}`);
 
     const otpCode = generateOtpCode();
     const otpSession = createOtpSessionToken();
@@ -104,11 +106,13 @@ router.post('/register', async (req: Request, res: Response) => {
     });
     await user.save();
 
-    await sendOtpEmail({
+    console.log(`[Auth] Attempting to send signup OTP to: "${user.email}" (type: ${typeof user.email})`);
+    const emailSent = await sendOtpEmail({
       to: user.email,
       code: otpCode,
       expiresAt: otpExpiresAt,
     });
+    console.log(`[Auth] Signup OTP email sent status: ${emailSent}`);
 
     if (!IS_PRODUCTION) {
       console.info(
@@ -305,11 +309,13 @@ router.post('/login', async (req: Request, res: Response) => {
     });
     await user.save();
 
-    await sendOtpEmail({
+    console.log(`[Auth] Attempting to send login OTP to: ${user.email}`);
+    const emailSent = await sendOtpEmail({
       to: user.email,
       code: otpCode,
       expiresAt: otpExpiresAt,
     });
+    console.log(`[Auth] Login OTP email sent status: ${emailSent}`);
 
     if (!IS_PRODUCTION) {
       console.info(

@@ -7,6 +7,7 @@ export interface RoomDocument extends Document {
   createdByName?: string;
   canvasData?: Record<string, unknown> | null;
   codeData?: string | null;
+  codeLanguage?: string | null;
   questionLink?: string | null;
   endedAt?: Date | null;
   createdAt: Date;
@@ -21,6 +22,7 @@ const roomSchema = new Schema<RoomDocument>(
     createdByName: { type: String },
     canvasData: { type: Schema.Types.Mixed, default: null },
     codeData: { type: String, default: "" },
+    codeLanguage: { type: String, default: "javascript" },
     questionLink: { type: String, default: null },
     endedAt: { type: Date, default: null },
   },

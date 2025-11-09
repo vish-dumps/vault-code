@@ -434,6 +434,51 @@ export function createSocialRouter() {
     }
   });
 
+  router.get("/users/me/friends", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const limitParam = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit;
+      const limit = Math.max(1, Math.min(100, limitParam ? Number(limitParam) : 50));
+      const offsetParam = Array.isArray(req.query.offset) ? req.query.offset[0] : req.query.offset;
+      const offset = Math.max(0, offsetParam ? Number(offsetParam) : 0);
+      const searchParam = Array.isArray(req.query.search) ? req.query.search[0] : req.query.search;
+      const searchTerm = typeof searchParam === "string" ? searchParam.trim().toLowerCase() : "";
+
+      const friendIds = await getAcceptedFriendIds(userId);
+      const summaries = await fetchUserSummaries(friendIds);
+      const ordered = friendIds
+        .map((id) => summaries.get(id))
+        .filter((value): value is NonNullable<typeof value> => Boolean(value));
+
+      const filtered = searchTerm.length
+        ? ordered.filter((friend) => {
+            const display = (friend.displayName ?? friend.username ?? "").toLowerCase();
+            const username = friend.username?.toLowerCase() ?? "";
+            const handle = friend.handle?.toLowerCase() ?? "";
+            return (
+              display.includes(searchTerm) || username.includes(searchTerm) || handle.includes(searchTerm)
+            );
+          })
+        : ordered;
+
+      const slice = filtered.slice(offset, offset + limit);
+
+      res.json({
+        total: filtered.length,
+        friends: slice.map((friend) => ({
+          id: friend.id,
+          username: friend.username,
+          displayName: friend.displayName,
+          handle: friend.handle,
+          badge: friend.badge ?? null,
+        })),
+      });
+    } catch (error) {
+      console.error("Error fetching viewer friend list:", error);
+      res.status(500).json({ error: "Failed to fetch friends" });
+    }
+  });
+
   router.get("/users/:identity/friends", async (req: AuthRequest, res) => {
     try {
       const viewerId = getUserId(req);

@@ -15,6 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Users, UserPlus, UserMinus, UserCheck, UserX, Sparkles, Clock, Bell, Code2 } from "lucide-react";
 import { useLocation } from "wouter";
+import { RoomFAB } from "@/components/meet-rooms/RoomFAB";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -253,8 +254,8 @@ export default function CommunityFriends() {
   });
 
   const pokeFriendMutation = useMutation({
-    mutationFn: async (friendId: string) => {
-      await apiRequest("POST", `/api/friends/${friendId}/poke`, {});
+    mutationFn: async ({ friendId, message }: { friendId: string; message?: string }) => {
+      await apiRequest("POST", `/api/friends/${friendId}/poke`, { message });
     },
     onSuccess: () => {
       toast({ 
@@ -615,19 +616,20 @@ export default function CommunityFriends() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="flex flex-col gap-4">
               {friendsQuery.isLoading && (
-                <div className="md:col-span-2 text-center text-sm text-muted-foreground">
+                <div className="text-center text-sm text-muted-foreground">
                   Loading friends...
                 </div>
               )}
               {!friendsQuery.isLoading && friends.length === 0 && (
-                <div className="md:col-span-2 text-center text-sm text-muted-foreground">
+                <div className="text-center text-sm text-muted-foreground">
                   You don&apos;t have any friends yet. Switch to Discover to start connecting!
                 </div>
               )}
               {friends.map((friend) => {
                 const avatarUrl = getAvatarUrl(friend);
+                const streakEndingSoon = (friend.streak ?? 0) > 0 && (friend.dailyProgress ?? 0) === 0;
                 return (
                   <div key={friend.id} className="flex items-start justify-between rounded border p-4">
                     <div className="flex items-start gap-3">
@@ -650,8 +652,16 @@ export default function CommunityFriends() {
                           {friend.isMutual && <Badge variant="outline">Mutual</Badge>}
                         </div>
                         <div className="text-xs text-muted-foreground">{friend.handle}</div>
-                        <div className="text-xs font-semibold text-amber-600">
-                          {friend.xp ?? 0} XP
+                        <div className="flex items-center gap-2">
+                          <div className="text-xs font-semibold text-amber-600">
+                            {friend.xp ?? 0} XP
+                          </div>
+                          {(friend.streak ?? 0) > 0 && (
+                            <div className="flex items-center gap-1 text-xs">
+                              <span>🔥</span>
+                              <span className="font-medium">{friend.streak} day streak</span>
+                            </div>
+                          )}
                         </div>
                         {friend.bio && <p className="text-xs text-muted-foreground line-clamp-2">{friend.bio}</p>}
                       </div>
@@ -665,6 +675,22 @@ export default function CommunityFriends() {
                         <Sparkles className="mr-1 h-4 w-4" />
                         View Profile
                       </Button>
+                      {streakEndingSoon && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                          onClick={() => {
+                            pokeFriendMutation.mutate({
+                              friendId: friend.id,
+                              message: "Hey! Don't forget to maintain your streak today! 🔥"
+                            });
+                          }}
+                        >
+                          <Bell className="mr-1 h-4 w-4" />
+                          Poke
+                        </Button>
+                      )}
                     </div>
                   </div>
                 );
@@ -924,7 +950,7 @@ export default function CommunityFriends() {
                         size="sm"
                         variant="ghost"
                         className="h-7 px-2"
-                        onClick={() => pokeFriendMutation.mutate(friend.id)}
+                        onClick={() => pokeFriendMutation.mutate({ friendId: friend.id })}
                         disabled={pokeFriendMutation.isPending}
                         title="Remind them to maintain their streak"
                       >
@@ -1021,6 +1047,8 @@ export default function CommunityFriends() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <RoomFAB />
     </>
   );
 }

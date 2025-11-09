@@ -4,6 +4,7 @@ export type NotificationType =
   | 'friend_request'
   | 'friend_accepted'
   | 'friend_declined'
+  | 'room_invite'
   | 'system'
   | 'achievement'
   | 'reward';
@@ -29,7 +30,7 @@ const NotificationSchema = new Schema<INotification>(
     },
     type: {
       type: String,
-      enum: ['friend_request', 'friend_accepted', 'friend_declined', 'system', 'achievement', 'reward'],
+      enum: ['friend_request', 'friend_accepted', 'friend_declined', 'room_invite', 'system', 'achievement', 'reward'],
       required: true,
       default: 'system',
     },

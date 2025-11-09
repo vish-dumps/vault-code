@@ -68,6 +68,13 @@ interface SendOtpOptions {
 }
 
 export async function sendOtpEmail({ to, code, expiresAt }: SendOtpOptions): Promise<boolean> {
+  console.log(`[Email] sendOtpEmail called with to="${to}", code="${code}"`);
+  
+  if (!to || typeof to !== 'string' || to.trim().length === 0) {
+    console.error(`[Email] ❌ Invalid email address provided: "${to}"`);
+    return false;
+  }
+  
   const expiresInMinutes = Math.ceil(
     Math.max(0, expiresAt.getTime() - Date.now()) / (60 * 1000)
   );
@@ -88,33 +95,47 @@ export async function sendOtpEmail({ to, code, expiresAt }: SendOtpOptions): Pro
   `;
 
   if (smtpTransporter) {
+    console.log(`[Email] Using SMTP transporter to send to: ${to}`);
     try {
       await sendEmailThroughSmtp({
         to,
         subject,
         html,
       });
+      console.log(`[Email] ✅ SMTP email sent successfully to: ${to}`);
       return true;
     } catch (error: unknown) {
-      console.error("[Auth] Failed to send OTP email via SMTP:", error);
+      console.error("[Email] ❌ Failed to send OTP email via SMTP:", error);
     }
+  } else {
+    console.log("[Email] ⚠️ SMTP transporter not available");
   }
 
   if (resendClient) {
+    console.log(`[Email] Using Resend client to send to: ${to}`);
     try {
-    await resendClient.emails.send({
-      from: resendFrom,
-      to,
-      subject,
-      html,
-    });
-
-    return true;
+      await resendClient.emails.send({
+        from: resendFrom,
+        to,
+        subject,
+        html,
+      });
+      console.log(`[Email] ✅ Resend email sent successfully to: ${to}`);
+      return true;
     } catch (error: unknown) {
-      console.error("[Auth] Failed to send OTP email via Resend:", error);
+      console.error("[Email] ❌ Failed to send OTP email via Resend:", error);
     }
+  } else {
+    console.log("[Email] ⚠️ Resend client not available");
   }
 
-  console.info(`[Auth] OTP fallback for ${to}: ${code} (expires at ${expiresAt.toISOString()})`);
+  console.log('\n========================================');
+  console.log('📧 OTP EMAIL (SMTP/Resend not configured)');
+  console.log('========================================');
+  console.log(`To: ${to}`);
+  console.log(`Code: ${code}`);
+  console.log(`Expires: ${expiresAt.toISOString()}`);
+  console.log(`Expires in: ${expiresInMinutes} minute(s)`);
+  console.log('========================================\n');
   return false;
 }

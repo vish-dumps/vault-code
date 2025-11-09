@@ -26,8 +26,8 @@ export const XP_REWARDS = {
     completeTodoTask: 3,
   },
   dailyGoalBonus: 120,
-  missedDailyGoal: -90,
-  unfinishedTodoPenalty: -20,
+  missedDailyGoal: -25,  // Reduced from -90 to be more fair
+  unfinishedTodoPenalty: -5,  // Reduced from -20 to be more reasonable
   registrationBonus: 80,
 } as const;
 

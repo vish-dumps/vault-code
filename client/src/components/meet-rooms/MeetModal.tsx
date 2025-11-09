@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { ExternalLink } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
   Dialog,
   DialogContent,
@@ -10,11 +12,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface MeetModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (meetLink: string) => Promise<void> | void;
+  onCreate?: (meetLink: string) => Promise<void> | void;
   isSubmitting?: boolean;
 }
 
@@ -42,12 +46,53 @@ function normalizeMeetLink(link: string): string | null {
   }
 }
 
-export function MeetModal({ open, onOpenChange, onCreate, isSubmitting }: MeetModalProps) {
+export function MeetModal({ open, onOpenChange, onCreate, isSubmitting: externalSubmitting }: MeetModalProps) {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
   const [value, setValue] = useState("");
   const [touched, setTouched] = useState(false);
 
   const normalizedValue = useMemo(() => normalizeMeetLink(value), [value]);
   const hasError = touched && !normalizedValue;
+
+  const createRoomMutation = useMutation({
+    mutationFn: async (meetLink: string) => {
+      console.log("[MeetModal] Creating room with link:", meetLink);
+      const response = await apiRequest("POST", "/api/rooms", { meetLink });
+      console.log("[MeetModal] Response status:", response.status);
+      
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        console.error("[MeetModal] Error response:", body);
+        throw new Error(body?.error || "Failed to create room");
+      }
+      
+      const data = await response.json();
+      console.log("[MeetModal] Room created successfully:", data);
+      return data as { roomId: string; meetLink: string; roomUrl: string };
+    },
+    onSuccess: (data) => {
+      console.log("[MeetModal] onSuccess called with:", data);
+      queryClient.invalidateQueries({ queryKey: ["/api/rooms"] });
+      handleOpenChange(false);
+      toast({
+        title: "Room ready! 🎉",
+        description: "Share the invite link and start collaborating.",
+      });
+      navigate(`/room/${data.roomId}?meet=${encodeURIComponent(data.meetLink)}`);
+    },
+    onError: (error: unknown) => {
+      console.error("[MeetModal] onError called:", error);
+      const message = error instanceof Error ? error.message : "Failed to create room";
+      toast({
+        title: "Unable to create room",
+        description: message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const isSubmitting = externalSubmitting || createRoomMutation.isPending;
 
   const handleOpenGoogleMeet = () => {
     window.open("https://meet.google.com/new", "_blank", "noopener,noreferrer");
@@ -59,7 +104,12 @@ export function MeetModal({ open, onOpenChange, onCreate, isSubmitting }: MeetMo
     if (!normalizedValue) {
       return;
     }
-    await onCreate(normalizedValue);
+    
+    if (onCreate) {
+      await onCreate(normalizedValue);
+    } else {
+      await createRoomMutation.mutateAsync(normalizedValue);
+    }
   };
 
   const handleOpenChange = (nextOpen: boolean) => {

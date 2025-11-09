@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, FileCode, BookOpen, Code2 } from "lucide-react";
+import { Plus, FileCode, BookOpen, Code2, Video, LogIn } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,10 +9,14 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { MeetModal } from "@/components/meet-rooms/MeetModal";
+import { JoinRoomModal } from "@/components/meet-rooms/JoinRoomModal";
 
 export function FloatingActionButton() {
   const [, setLocation] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [showJoinRoomModal, setShowJoinRoomModal] = useState(false);
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
@@ -62,6 +66,36 @@ export function FloatingActionButton() {
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
+
+          <DropdownMenuItem
+            onClick={() => {
+              setShowCreateRoomModal(true);
+              setIsOpen(false);
+            }}
+            className="cursor-pointer py-3"
+          >
+            <Video className="h-4 w-4 mr-3" />
+            <div>
+              <div className="font-medium">Create Room</div>
+              <div className="text-xs text-muted-foreground">Start a live collaboration</div>
+            </div>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            onClick={() => {
+              setShowJoinRoomModal(true);
+              setIsOpen(false);
+            }}
+            className="cursor-pointer py-3"
+          >
+            <LogIn className="h-4 w-4 mr-3" />
+            <div>
+              <div className="font-medium">Join Room</div>
+              <div className="text-xs text-muted-foreground">Enter with link or code</div>
+            </div>
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
           
           <DropdownMenuItem
             onClick={() => {
@@ -75,6 +109,16 @@ export function FloatingActionButton() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <MeetModal
+        open={showCreateRoomModal}
+        onOpenChange={setShowCreateRoomModal}
+      />
+
+      <JoinRoomModal
+        open={showJoinRoomModal}
+        onOpenChange={setShowJoinRoomModal}
+      />
     </div>
   );
 }

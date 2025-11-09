@@ -32,7 +32,9 @@ import Settings from "@/pages/settings";
 import Feedback from "@/pages/feedback";
 import About from "@/pages/about";
 import Support from "@/pages/support";
+import RoomPage from "@/pages/RoomPage";
 import { OnboardingTutorial } from "@/components/onboarding-tutorial";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function AuthenticatedRoutes() {
   return (
@@ -54,6 +56,7 @@ function AuthenticatedRoutes() {
       <Route path="/feedback" component={Feedback} />
       <Route path="/about" component={About} />
       <Route path="/support" component={Support} />
+      <Route path="/room/:id" component={RoomPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -77,6 +80,7 @@ function AppContent() {
     "--sidebar-width-icon": "3rem",
   };
   const isDashboard = location === "/";
+  const isRoomPage = location.startsWith("/room/");
 
   if (isLoading) {
     return (
@@ -88,6 +92,11 @@ function AppContent() {
 
   if (!isAuthenticated) {
     return <UnauthenticatedRoutes />;
+  }
+
+  // Room page gets full-screen layout without sidebar
+  if (isRoomPage) {
+    return <AuthenticatedRoutes />;
   }
 
   return (
@@ -115,19 +124,19 @@ function AppContent() {
   );
 }
 
-function App() {
+export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <ThemeProvider>
-            <AppContent />
-            <Toaster />
-          </ThemeProvider>
-        </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <TooltipProvider>
+            <ThemeProvider>
+              <AppContent />
+              <Toaster />
+            </ThemeProvider>
+          </TooltipProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
-
-export default App;

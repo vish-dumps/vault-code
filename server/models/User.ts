@@ -44,6 +44,7 @@ export interface IUser extends Document {
   xpVisibility?: 'public' | 'private';
   showProgressGraphs?: boolean;
   streakReminders?: boolean;
+  autoApplyStreakFreeze?: boolean;
   otpCodeHash?: string;
   otpExpiresAt?: Date;
   otpSession?: string;
@@ -278,6 +279,10 @@ const UserSchema = new Schema<IUser>({
   streakReminders: {
     type: Boolean,
     default: true,
+  },
+  autoApplyStreakFreeze: {
+    type: Boolean,
+    default: false,
   },
   rewardsInventory: {
     type: [RewardInventorySchema],

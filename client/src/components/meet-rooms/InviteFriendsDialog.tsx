@@ -107,10 +107,15 @@ export function InviteFriendsDialog({ roomId, open, onOpenChange }: InviteFriend
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selectedIds.length || inviteMutation.isPending) {
-      if (!selectedIds.length) {
-        toast({ title: "Pick someone", description: "Select at least one friend to invite." });
-      }
+    if (inviteMutation.isPending) {
+      return;
+    }
+    if (selectedIds.length === 0) {
+      toast({ 
+        title: "No friends selected", 
+        description: "Please select at least one friend to invite.",
+        variant: "destructive"
+      });
       return;
     }
     inviteMutation.mutate(selectedIds);

@@ -23,6 +23,7 @@ import { Notification } from "./models/Notification";
 import { User as UserModel } from "./models/User";
 import { Answer } from "./models/Answer";
 import { Feedback } from "./models/Feedback";
+import { Room } from "./models/Room";
 import {
   XP_REWARDS,
   XP_COMBO_RULES,
@@ -33,7 +34,8 @@ import {
   calculateComboBonus
 } from "@shared/gamification";
 import cron from "node-cron";
-import { initRealtime } from "./services/realtime";
+import { initRealtime, notifyUser } from "./services/realtime";
+import { initMeetRoomsSocket, closeRoom } from "./services/meetRoomsSocket";
 import { computeWeeklyLeaderboard } from "./services/leaderboard";
 import { createAnswerRouter } from "./controllers/answers";
 import { createSocialRouter } from "./controllers/social";
@@ -46,6 +48,7 @@ import {
   activateReward,
   buildRewardOverview,
 } from "./services/rewards";
+import { customAlphabet } from "nanoid";
 
 interface ContestResponse {
   id: string;
@@ -170,6 +173,68 @@ async function sendFeedbackEmail(feedback: any) {
       <p style="margin-top:16px;font-size:12px;color:#666;">
         Submitted at: ${new Date(feedback.createdAt ?? Date.now()).toLocaleString()}
       </p>
+    `,
+  };
+
+  await sendEmailThroughSmtp(mailOptions);
+}
+
+// Send thank you email to user after feedback submission
+async function sendThankYouEmail(userEmail: string, username: string, rating: number) {
+  if (!hasConfiguredSmtp() || !userEmail) {
+    return;
+  }
+
+  const stars = "\u2605".repeat(Number(rating) || 0);
+  const mailOptions = {
+    to: userEmail,
+    subject: "Thank you for your feedback! 💜",
+    html: `
+      <div style="font-family: 'Segoe UI', system-ui, sans-serif; padding: 24px; max-width: 600px; margin: 0 auto; color: #0f172a;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h1 style="margin: 0; font-size: 32px; color: #5b21b6;">Thank You! 💜</h1>
+        </div>
+        
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 16px;">
+          Hi <strong>${username}</strong>,
+        </p>
+        
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 16px;">
+          Thank you for taking the time to share your feedback with us! Your ${stars} rating and insights mean the world to us.
+        </p>
+        
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 16px;">
+          We're constantly working to improve CodeVault and make it the best experience for our community. 
+          Your feedback helps us understand what's working well and where we can do better.
+        </p>
+        
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 20px; margin: 24px 0; text-align: center;">
+          <p style="color: white; font-size: 18px; margin: 0; font-weight: 600;">
+            We're building CodeVault together! 🚀
+          </p>
+        </div>
+        
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 16px;">
+          If you have any questions or need support, feel free to reach out anytime. 
+          We're here to help you succeed on your coding journey!
+        </p>
+        
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 8px;">
+          Keep coding, keep growing! 💪
+        </p>
+        
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 24px;">
+          Best regards,<br/>
+          <strong>The CodeVault Team</strong>
+        </p>
+        
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+        
+        <p style="font-size: 12px; color: #64748b; text-align: center;">
+          CodeVault - Your Personal Coding Knowledge Vault<br/>
+          <a href="mailto:codevault.updates@gmail.com" style="color: #5b21b6;">codevault.updates@gmail.com</a>
+        </p>
+      </div>
     `,
   };
 
@@ -457,6 +522,59 @@ async function applyXp(
   return finalUser;
 }
 
+// Helper function to calculate profile completion percentage
+function calculateProfileCompletion(user: User): { percentage: number; missingFields: string[] } {
+  const fields = [
+    { key: 'name', label: 'Name', value: user.name },
+    { key: 'displayName', label: 'Display Name', value: user.displayName },
+    { key: 'bio', label: 'Bio', value: user.bio },
+    { key: 'college', label: 'College', value: user.college },
+    { key: 'profileImage', label: 'Profile Picture', value: user.profileImage || user.customAvatarUrl },
+    { key: 'leetcodeUsername', label: 'LeetCode Username', value: user.leetcodeUsername },
+    { key: 'codeforcesUsername', label: 'Codeforces Username', value: user.codeforcesUsername },
+  ];
+
+  const completedFields = fields.filter(field => field.value && String(field.value).trim().length > 0);
+  const missingFields = fields.filter(field => !field.value || String(field.value).trim().length === 0).map(f => f.label);
+  const percentage = Math.round((completedFields.length / fields.length) * 100);
+
+  return { percentage, missingFields };
+}
+
+// Helper function to check and award profile completion bonus
+async function checkAndAwardProfileCompletionBonus(userId: string): Promise<void> {
+  const user = await mongoStorage.getUser(userId);
+  if (!user) return;
+
+  const { percentage } = calculateProfileCompletion(user);
+  
+  // Check if profile is 100% complete and user hasn't received the bonus yet
+  if (percentage === 100 && !user.badgesEarned?.includes('profile_complete_100')) {
+    const PROFILE_COMPLETION_BONUS = 150;
+    
+    // Award XP
+    await applyXp(userId, PROFILE_COMPLETION_BONUS, {
+      badgesEarned: [...(user.badgesEarned || []), 'profile_complete_100']
+    });
+    
+    // Create notification
+    try {
+      await Notification.create({
+        userId: new Types.ObjectId(userId),
+        type: 'achievement',
+        title: 'Profile Complete! 🎉',
+        message: `You completed 100% of your profile! +${PROFILE_COMPLETION_BONUS} XP bonus awarded.`,
+        metadata: {
+          bonus: PROFILE_COMPLETION_BONUS,
+          achievement: 'profile_complete_100',
+        },
+      });
+    } catch (error) {
+      console.error('Failed to create profile completion notification:', error);
+    }
+  }
+}
+
 // Helper function to update streak on activity
 async function updateStreakOnActivity(userId: string): Promise<void> {
   const user = await mongoStorage.getUser(userId);
@@ -501,6 +619,39 @@ async function updateStreakOnActivity(userId: string): Promise<void> {
         }
         effectsUpdated = true;
         newStreak = Math.max(1, (user.streak ?? 0) + 1);
+      } else if (user.autoApplyStreakFreeze) {
+        // Auto-apply streak freeze if enabled
+        const rewardsInventory = Array.isArray(user.rewardsInventory) ? [...user.rewardsInventory] : [];
+        const freezeReward = rewardsInventory.find((item: any) => 
+          item.status === "available" && 
+          (item.rewardId.includes("streak-freeze") || item.instanceId.includes("streak-freeze"))
+        );
+        
+        if (freezeReward) {
+          // Consume the streak freeze
+          freezeReward.status = "consumed";
+          freezeReward.usedAt = new Date();
+          
+          // Add freeze effect
+          const { randomUUID } = await import("crypto");
+          rewardEffects.push({
+            id: randomUUID(),
+            rewardId: freezeReward.rewardId,
+            instanceId: freezeReward.instanceId,
+            type: "streak_freeze",
+            activatedAt: new Date(),
+            usesRemaining: 0, // Already consumed for this miss
+            metadata: { autoApplied: true },
+          } as any);
+          
+          effectsUpdated = true;
+          newStreak = Math.max(1, (user.streak ?? 0) + 1);
+          
+          // Update inventory
+          await mongoStorage.updateUser(userId, { rewardsInventory });
+        } else {
+          newStreak = 1;
+        }
       } else {
         newStreak = 1;
       }
@@ -1155,11 +1306,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
             })) ?? user;
         }
       }
+
+      // Add profile completion information
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
       
-      res.json(user);
+      const profileCompletion = calculateProfileCompletion(user);
+      const userResponse = {
+        ...(user as any).toObject ? (user as any).toObject() : user,
+        profileCompletion,
+      };
+      
+      res.json(userResponse);
     } catch (error) {
       console.error("Error fetching user profile:", error);
       res.status(500).json({ error: "Failed to fetch profile" });
+    }
+  });
+
+  app.patch("/api/user/profile", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const {
+        leetcodeUsername,
+        codeforcesUsername,
+        name,
+        username,
+        profileImage,
+        customAvatarUrl,
+        avatarType,
+        avatarGender,
+        randomAvatarSeed,
+        bio,
+        college,
+        profileVisibility,
+        friendRequestPolicy,
+        searchVisibility,
+        xpVisibility,
+        showProgressGraphs,
+        streakReminders,
+        autoApplyStreakFreeze,
+      } = req.body;
+
+      // Validate username if provided
+      if (username !== undefined) {
+        const trimmed = username.trim();
+        if (trimmed.length < 3 || trimmed.length > 30) {
+          return res.status(400).json({
+            error: "Username must be between 3 and 30 characters",
+          });
+        }
+
+        // Check if username is taken by another user
+        const existingUser = await UserModel.findOne({
+          username: trimmed,
+          _id: { $ne: new Types.ObjectId(userId) },
+        });
+
+        if (existingUser) {
+          return res.status(409).json({
+            error: "Username is already taken",
+          });
+        }
+      }
+
+      // Build update object with only provided fields
+      const updateData: any = {};
+
+      if (leetcodeUsername !== undefined) {
+        updateData.leetcodeUsername = leetcodeUsername || null;
+      }
+      if (codeforcesUsername !== undefined) {
+        updateData.codeforcesUsername = codeforcesUsername || null;
+      }
+      if (name !== undefined) {
+        updateData.name = name || null;
+      }
+      if (username !== undefined) {
+        updateData.username = username.trim();
+      }
+      if (profileImage !== undefined) {
+        updateData.profileImage = profileImage || null;
+      }
+      if (customAvatarUrl !== undefined) {
+        updateData.customAvatarUrl = customAvatarUrl || null;
+      }
+      if (avatarType !== undefined) {
+        updateData.avatarType = avatarType;
+      }
+      if (avatarGender !== undefined) {
+        updateData.avatarGender = avatarGender;
+      }
+      if (randomAvatarSeed !== undefined) {
+        updateData.randomAvatarSeed = randomAvatarSeed;
+      }
+      if (bio !== undefined) {
+        updateData.bio = bio || null;
+      }
+      if (college !== undefined) {
+        updateData.college = college || null;
+      }
+      if (profileVisibility !== undefined) {
+        updateData.profileVisibility = profileVisibility;
+      }
+      if (friendRequestPolicy !== undefined) {
+        updateData.friendRequestPolicy = friendRequestPolicy;
+      }
+      if (searchVisibility !== undefined) {
+        updateData.searchVisibility = searchVisibility;
+      }
+      if (xpVisibility !== undefined) {
+        updateData.xpVisibility = xpVisibility;
+      }
+      if (showProgressGraphs !== undefined) {
+        updateData.showProgressGraphs = showProgressGraphs;
+      }
+      if (streakReminders !== undefined) {
+        updateData.streakReminders = streakReminders;
+      }
+      if (autoApplyStreakFreeze !== undefined) {
+        updateData.autoApplyStreakFreeze = autoApplyStreakFreeze;
+      }
+
+      // Update the user
+      const updatedUser = await mongoStorage.updateUser(userId, updateData);
+
+      if (!updatedUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Check and award profile completion bonus
+      await checkAndAwardProfileCompletionBonus(userId);
+
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating user profile:", error);
+      res.status(500).json({ error: "Failed to update profile" });
     }
   });
 
@@ -1901,6 +2184,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Don't fail the request if email fails
       }
 
+      // Send thank you email to user
+      try {
+        await sendThankYouEmail(user.email, user.username, rating);
+      } catch (emailError) {
+        console.error("Failed to send thank you email:", emailError);
+        // Don't fail the request if email fails
+      }
+
       res.status(201).json({
         message: "Feedback submitted successfully",
         feedback: {
@@ -1970,6 +2261,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await notification.save();
 
+      // Send real-time notification
+      notifyUser(friendId, "notifications:new", {
+        id: notification._id.toString(),
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        metadata: notification.metadata,
+        createdAt: notification.createdAt,
+      });
+
       res.json({
         success: true,
         message: "Poke sent successfully"
@@ -1980,8 +2281,218 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========== MEET ROOMS ROUTES ==========
+  const generateRoomId = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 8);
+
+  // Create a new room
+  app.post("/api/rooms", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      console.log('[Rooms] POST /api/rooms called');
+      console.log('[Rooms] Request body:', req.body);
+      
+      const userId = getUserId(req);
+      console.log('[Rooms] User ID:', userId);
+      
+      const user = await mongoStorage.getUser(userId);
+      if (!user) {
+        console.error('[Rooms] User not found:', userId);
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const { meetLink } = req.body;
+      console.log('[Rooms] meetLink from body:', meetLink);
+      
+      if (!meetLink || typeof meetLink !== "string") {
+        console.error('[Rooms] Invalid meetLink:', meetLink);
+        return res.status(400).json({ error: "Meet link is required" });
+      }
+
+      // Validate Google Meet link
+      const trimmed = meetLink.trim();
+      if (!trimmed.includes("meet.google.com")) {
+        console.error('[Rooms] Not a Google Meet link:', trimmed);
+        return res.status(400).json({ error: "Invalid Google Meet link" });
+      }
+
+      const roomId = generateRoomId();
+      console.log('[Rooms] Generated room ID:', roomId);
+      
+      const room = new Room({
+        roomId,
+        meetLink: trimmed,
+        createdBy: new Types.ObjectId(userId),
+        createdByName: user.username || user.name || "Anonymous",
+        canvasData: null,
+        codeData: "",
+        codeLanguage: "javascript",
+        questionLink: null,
+      });
+
+      await room.save();
+      console.log('[Rooms] Room saved successfully:', roomId);
+
+      res.json({
+        roomId,
+        meetLink: trimmed,
+        roomUrl: `/room/${roomId}?meet=${encodeURIComponent(trimmed)}`,
+      });
+    } catch (error) {
+      console.error("[Rooms] Error creating room:", error);
+      res.status(500).json({ error: "Failed to create room" });
+    }
+  });
+
+  // Get all rooms for the current user
+  app.get("/api/rooms", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const rooms = await Room.find({
+        createdBy: new Types.ObjectId(userId),
+      })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean();
+
+      res.json(
+        rooms.map((room) => ({
+          roomId: room.roomId,
+          meetLink: room.meetLink,
+          createdAt: room.createdAt,
+          updatedAt: room.updatedAt,
+          createdByName: room.createdByName,
+          canvasData: room.canvasData,
+          codeData: room.codeData,
+          codeLanguage: room.codeLanguage ?? "javascript",
+          questionLink: room.questionLink,
+          endedAt: room.endedAt,
+        }))
+      );
+    } catch (error) {
+      console.error("Error fetching rooms:", error);
+      res.status(500).json({ error: "Failed to fetch rooms" });
+    }
+  });
+
+  // Get a specific room
+  app.get("/api/rooms/:id", async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const room = await Room.findOne({ roomId: id }).lean();
+
+      if (!room) {
+        return res.status(404).json({ error: "Room not found" });
+      }
+
+      res.json({
+        roomId: room.roomId,
+        meetLink: room.meetLink,
+        createdAt: room.createdAt,
+        updatedAt: room.updatedAt,
+        createdByName: room.createdByName,
+        canvasData: room.canvasData,
+        codeData: room.codeData,
+        codeLanguage: room.codeLanguage ?? "javascript",
+        questionLink: room.questionLink,
+        endedAt: room.endedAt,
+      });
+    } catch (error) {
+      console.error("Error fetching room:", error);
+      res.status(500).json({ error: "Failed to fetch room" });
+    }
+  });
+
+  // Invite friends to a room
+  app.post("/api/rooms/:id/invite", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await mongoStorage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const { id: roomId } = req.params;
+      const { friendIds } = req.body;
+
+      if (!Array.isArray(friendIds) || friendIds.length === 0) {
+        return res.status(400).json({ error: "Friend IDs are required" });
+      }
+
+      const room = await Room.findOne({ roomId }).lean();
+      if (!room) {
+        return res.status(404).json({ error: "Room not found" });
+      }
+
+      let invited = 0;
+      for (const friendId of friendIds) {
+        try {
+          const notification = new Notification({
+            userId: new Types.ObjectId(friendId),
+            type: "room_invite",
+            title: "Room Invite! 🎨",
+            message: `${user.username || user.name || "A friend"} invited you to join a live room`,
+            metadata: {
+              roomId,
+              meetLink: room.meetLink,
+              fromUserId: userId,
+              fromUsername: user.username || user.name,
+            },
+          });
+          await notification.save();
+          
+          // Send real-time notification
+          notifyUser(friendId, "notifications:new", {
+            id: notification._id.toString(),
+            type: notification.type,
+            title: notification.title,
+            message: notification.message,
+            metadata: notification.metadata,
+            createdAt: notification.createdAt,
+          });
+          
+          invited++;
+        } catch (err) {
+          console.error(`Failed to invite friend ${friendId}:`, err);
+        }
+      }
+
+      res.json({ invited, skipped: friendIds.length - invited });
+    } catch (error) {
+      console.error("Error inviting friends:", error);
+      res.status(500).json({ error: "Failed to send invites" });
+    }
+  });
+
+  // End a room
+  app.post("/api/rooms/:id/end", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const { id: roomId } = req.params;
+
+      const room = await Room.findOne({ roomId });
+      if (!room) {
+        return res.status(404).json({ error: "Room not found" });
+      }
+
+      if (room.createdBy.toString() !== userId) {
+        return res.status(403).json({ error: "Only the room creator can end the room" });
+      }
+
+      room.endedAt = new Date();
+      await room.save();
+
+      // Close the room in socket
+      closeRoom(roomId);
+
+      res.json({ success: true, message: "Room ended successfully" });
+    } catch (error) {
+      console.error("Error ending room:", error);
+      res.status(500).json({ error: "Failed to end room" });
+    }
+  });
+
   const httpServer = createServer(app);
   initRealtime(httpServer);
+  initMeetRoomsSocket(httpServer);
 
   cron.schedule("0 0 * * 1", async () => {
     try {
@@ -1997,4 +2508,3 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   return httpServer;
 }
-

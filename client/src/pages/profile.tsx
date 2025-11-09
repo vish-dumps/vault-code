@@ -210,9 +210,13 @@ export default function Profile() {
         return null;
       }
 
+      // Limit final image size to 400x400 for better compression
+      const MAX_SIZE = 400;
       const size = Math.min(cropArea.width, cropArea.height);
-      canvas.width = size;
-      canvas.height = size;
+      const finalSize = Math.min(size, MAX_SIZE);
+      
+      canvas.width = finalSize;
+      canvas.height = finalSize;
 
       ctx.fillStyle = "#fff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -229,12 +233,22 @@ export default function Profile() {
         canvas.height
       );
 
-      return canvas.toDataURL("image/jpeg", 0.92);
+      // Try multiple quality levels to ensure file size is reasonable
+      let quality = 0.85;
+      let dataUrl = canvas.toDataURL("image/jpeg", quality);
+      
+      // If still too large (> 500KB in base64), reduce quality further
+      while (dataUrl.length > 700000 && quality > 0.5) {
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL("image/jpeg", quality);
+      }
+
+      return dataUrl;
     },
     []
   );
 
-  const onCropComplete = useCallback((_croppedArea, croppedPixels) => {
+  const onCropComplete = useCallback((_croppedArea: any, croppedPixels: any) => {
     setCroppedAreaPixels(croppedPixels ?? null);
   }, []);
 
@@ -243,10 +257,12 @@ export default function Profile() {
   };
 
   const handleProfileImageUpload = (file: File) => {
+    console.log('File selected:', file.name, 'Size:', file.size, 'Type:', file.type);
+    
     if (file.size > MAX_PROFILE_IMAGE_SIZE) {
       toast({
         title: "Image too large",
-        description: "Please choose an image smaller than 2MB.",
+        description: `Please choose an image smaller than ${MAX_PROFILE_IMAGE_SIZE / (1024 * 1024)}MB. Your file is ${(file.size / (1024 * 1024)).toFixed(2)}MB.`,
         variant: "destructive",
       });
       return;
@@ -255,11 +271,20 @@ export default function Profile() {
     const reader = new FileReader();
     reader.onloadend = () => {
       const result = reader.result as string;
+      console.log('Image loaded, base64 length:', result.length);
       setPendingCropImage(result);
       setIsCropping(true);
       setZoom(1);
       setCrop({ x: 0, y: 0 });
       setCroppedAreaPixels(null);
+    };
+    reader.onerror = (error) => {
+      console.error('FileReader error:', error);
+      toast({
+        title: "Failed to read image",
+        description: "There was an error reading the image file.",
+        variant: "destructive",
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -575,69 +600,6 @@ export default function Profile() {
           Manage your account and connected platforms
         </p>
       </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.3 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-background/95 via-background/80 to-background/95 p-6 shadow-[0_25px_80px_-50px_rgba(124,58,237,0.45)]"
-      >
-        <div className="absolute -right-24 top-1/3 h-40 w-40 rounded-full bg-purple-500/20 blur-3xl" />
-        <div className="absolute left-16 -top-24 h-32 w-48 -rotate-6 rounded-full bg-cyan-500/10 blur-3xl" />
-        <div className="relative z-10 grid gap-6 md:grid-cols-[1fr,1.4fr] md:items-center">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-primary/10 px-4 py-1 text-xs uppercase tracking-[0.3em] text-primary">
-              <Sparkles className="h-3 w-3" />
-              Guided Workflows
-            </div>
-            <h2 className="text-2xl font-semibold leading-tight">
-              Pair your profile insights with action-ready routines.
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Start with the usage guide to understand the practice loop, then jump straight into the workspace
-              or snippets library to apply what you learn.
-            </p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {highlightCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <motion.button
-                  key={card.title}
-                  type="button"
-                  onClick={() => setLocation(card.destination)}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-5 text-left transition-colors hover:border-primary/40 hover:bg-card"
-                >
-                  <div className={`pointer-events-none absolute inset-0 -z-10 opacity-0 transition-opacity duration-500 group-hover:opacity-100 bg-gradient-to-br ${card.accent}`} />
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-xl border border-border/60 bg-background/80 p-2">
-                        <Icon className="h-4 w-4 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-semibold leading-snug">{card.title}</h3>
-                        <p className="mt-1 text-xs text-muted-foreground">{card.description}</p>
-                      </div>
-                    </div>
-                    {card.badge && (
-                      <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
-                        {card.badge}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="mt-4 flex items-center gap-2 text-sm font-medium text-primary">
-                    {card.cta}
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                  </div>
-                </motion.button>
-              );
-            })}
-          </div>
-        </div>
-      </motion.div>
 
       <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-1 min-w-0">
@@ -1011,6 +973,70 @@ export default function Profile() {
 
         </div>
       </div>
+
+      {/* Guided Workflows - Moved to bottom */}
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.3 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+        className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-background/95 via-background/80 to-background/95 p-6 shadow-[0_25px_80px_-50px_rgba(124,58,237,0.45)]"
+      >
+        <div className="absolute -right-24 top-1/3 h-40 w-40 rounded-full bg-purple-500/20 blur-3xl" />
+        <div className="absolute left-16 -top-24 h-32 w-48 -rotate-6 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="relative z-10 grid gap-6 md:grid-cols-[1fr,1.4fr] md:items-center">
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-primary/10 px-4 py-1 text-xs uppercase tracking-[0.3em] text-primary">
+              <Sparkles className="h-3 w-3" />
+              Guided Workflows
+            </div>
+            <h2 className="text-2xl font-semibold leading-tight">
+              Pair your profile insights with action-ready routines.
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Start with the usage guide to understand the practice loop, then jump straight into the workspace
+              or snippets library to apply what you learn.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {highlightCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <motion.button
+                  key={card.title}
+                  type="button"
+                  onClick={() => setLocation(card.destination)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-5 text-left transition-colors hover:border-primary/40 hover:bg-card"
+                >
+                  <div className={`pointer-events-none absolute inset-0 -z-10 opacity-0 transition-opacity duration-500 group-hover:opacity-100 bg-gradient-to-br ${card.accent}`} />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl border border-border/60 bg-background/80 p-2">
+                        <Icon className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold leading-snug">{card.title}</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">{card.description}</p>
+                      </div>
+                    </div>
+                    {card.badge && (
+                      <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
+                        {card.badge}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-4 flex items-center gap-2 text-sm font-medium text-primary">
+                    {card.cta}
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }

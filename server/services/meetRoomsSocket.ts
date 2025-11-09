@@ -15,7 +15,7 @@ type CanvasUpdatePayload = {
 
 type CodeUpdatePayload = {
   roomId: string;
-  code: string;
+  code?: string;
   language?: string;
 };
 
@@ -34,7 +34,22 @@ type CanvasScene = {
 type PendingRoomState = {
   canvasData?: CanvasScene | null;
   codeData?: string;
+  codeLanguage?: string;
   questionLink?: string | null;
+};
+
+type CodeCursorUpdatePayload = {
+  roomId: string;
+  position?: {
+    lineNumber: number;
+    column: number;
+  } | null;
+  selection?: {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+  } | null;
 };
 
 type RoomMember = {
@@ -89,6 +104,9 @@ function schedulePersist(roomId: string) {
     if (state.codeData !== undefined) {
       update.codeData = state.codeData;
     }
+    if (state.codeLanguage !== undefined) {
+      update.codeLanguage = state.codeLanguage ?? "javascript";
+    }
     if (state.questionLink !== undefined) {
       update.questionLink = state.questionLink ?? null;
     }
@@ -104,6 +122,8 @@ function schedulePersist(roomId: string) {
 }
 
 export function initMeetRoomsSocket(server: HttpServer) {
+  console.log("[MeetRoomsSocket] Initializing Socket.io server on path: /socket.io/meet-rooms");
+  
   const io = new Server(server, {
     path: "/socket.io/meet-rooms",
     cors: {
@@ -114,18 +134,24 @@ export function initMeetRoomsSocket(server: HttpServer) {
     transports: ['websocket', 'polling'],
   });
   ioInstance = io;
+  
+  console.log("[MeetRoomsSocket] Socket.io server created successfully");
 
   io.use((socket, next) => {
+    console.log("[MeetRoomsSocket] Authentication attempt from:", socket.handshake.address);
     const token = socket.handshake.auth?.token;
     if (!token || typeof token !== "string") {
+      console.error("[MeetRoomsSocket] No token provided");
       return next(new Error("Authentication required"));
     }
 
     const payload = verifyToken(token);
     if (!payload) {
+      console.error("[MeetRoomsSocket] Invalid token");
       return next(new Error("Invalid token"));
     }
 
+    console.log("[MeetRoomsSocket] Authentication successful for user:", payload.userId);
     (socket.data as SocketUserData).userId = payload.userId;
     (socket.data as SocketUserData).username = payload.username;
 
@@ -133,6 +159,9 @@ export function initMeetRoomsSocket(server: HttpServer) {
   });
 
   io.on("connection", (socket) => {
+    const data = socket.data as SocketUserData;
+    console.log("[MeetRoomsSocket] Client connected:", socket.id, "User:", data.userId);
+    
     socket.on("join_room", async (message: { roomId?: string }) => {
       const roomId = message?.roomId?.trim();
       if (!roomId) {
@@ -172,6 +201,9 @@ export function initMeetRoomsSocket(server: HttpServer) {
         if (state.questionLink === undefined) {
           state.questionLink = room.questionLink ?? null;
         }
+        if (state.codeLanguage === undefined) {
+          state.codeLanguage = room.codeLanguage ?? "javascript";
+        }
 
         const persistedScene = sanitizeScene(room.canvasData);
         const scenePayload = state.canvasData ?? persistedScene ?? null;
@@ -180,6 +212,7 @@ export function initMeetRoomsSocket(server: HttpServer) {
         socket.emit("room_state", {
           canvasData: scenePayload,
           codeData: state.codeData ?? room.codeData ?? "",
+          codeLanguage: state.codeLanguage ?? room.codeLanguage ?? "javascript",
           questionLink,
           meetLink: room.meetLink,
           createdByName: room.createdByName,
@@ -236,20 +269,71 @@ export function initMeetRoomsSocket(server: HttpServer) {
         return;
       }
 
-      if (typeof payload.code !== "string") {
+      const state: PendingRoomState = pendingRoomState.get(roomId) ?? {};
+      let didChange = false;
+
+      if (typeof payload.code === "string") {
+        state.codeData = payload.code;
+        didChange = true;
+      }
+
+      if (typeof payload.language === "string" && payload.language.trim().length) {
+        state.codeLanguage = payload.language.trim();
+        didChange = true;
+      }
+
+      if (!didChange) {
         return;
       }
 
-      const state: PendingRoomState = pendingRoomState.get(roomId) ?? {};
-      state.codeData = payload.code;
       pendingRoomState.set(roomId, state);
 
       socket.to(roomId).emit("code_update", {
-        code: payload.code,
-        language: payload.language,
+        code: payload.code ?? state.codeData ?? "",
+        language: state.codeLanguage ?? payload.language ?? "javascript",
       });
 
       schedulePersist(roomId);
+    });
+
+    socket.on("code_cursor_update", (payload: CodeCursorUpdatePayload) => {
+      const roomId = payload?.roomId?.trim();
+      if (!roomId || !socket.rooms.has(roomId)) {
+        return;
+      }
+
+      const position =
+        payload.position &&
+        typeof payload.position.lineNumber === "number" &&
+        typeof payload.position.column === "number"
+          ? {
+              lineNumber: Math.max(1, Math.floor(payload.position.lineNumber)),
+              column: Math.max(1, Math.floor(payload.position.column)),
+            }
+          : null;
+
+      const selection =
+        payload.selection &&
+        typeof payload.selection.startLineNumber === "number" &&
+        typeof payload.selection.startColumn === "number" &&
+        typeof payload.selection.endLineNumber === "number" &&
+        typeof payload.selection.endColumn === "number"
+          ? {
+              startLineNumber: Math.max(1, Math.floor(payload.selection.startLineNumber)),
+              startColumn: Math.max(1, Math.floor(payload.selection.startColumn)),
+              endLineNumber: Math.max(1, Math.floor(payload.selection.endLineNumber)),
+              endColumn: Math.max(1, Math.floor(payload.selection.endColumn)),
+            }
+          : null;
+
+      const emitterData = socket.data as SocketUserData;
+
+      socket.to(roomId).emit("code_cursor_update", {
+        userId: emitterData.userId,
+        username: emitterData.username,
+        position,
+        selection,
+      });
     });
 
     socket.on("cursor_update", (payload: CursorUpdatePayload) => {
@@ -290,16 +374,16 @@ export function initMeetRoomsSocket(server: HttpServer) {
     });
 
     socket.on("disconnect", () => {
-      const data = socket.data as SocketUserData;
-      socket.rooms.forEach((roomId) => {
-        if (roomId === socket.id) return;
-        const membersForRoom = roomMembers.get(roomId);
-        if (membersForRoom) {
-          membersForRoom.delete(socket.id);
-          if (!membersForRoom.size) {
-            roomMembers.delete(roomId);
-          }
+      roomMembers.forEach((membersForRoom, roomId) => {
+        if (!membersForRoom.has(socket.id)) {
+          return;
         }
+
+        membersForRoom.delete(socket.id);
+        if (!membersForRoom.size) {
+          roomMembers.delete(roomId);
+        }
+
         socket.to(roomId).emit("room_presence", {
           type: "left",
           member: {
