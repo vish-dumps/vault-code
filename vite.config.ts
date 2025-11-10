@@ -33,6 +33,9 @@ export default defineConfig({
   optimizeDeps: {
     include: ["react", "react-dom", "react/jsx-runtime"],
     force: true,
+    esbuildOptions: {
+      external: ["react", "react-dom", "react/jsx-runtime"],
+    },
   },
   define: {
     // Fix for Excalidraw - define process.env

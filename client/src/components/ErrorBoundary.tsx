@@ -25,6 +25,19 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
 
+  componentDidUpdate(prevProps: Props, prevState: State) {
+    // Auto-reload after 3 seconds if error persists
+    if (this.state.hasError && !prevState.hasError) {
+      console.log('[ErrorBoundary] Error detected, will auto-reload in 3 seconds...');
+      setTimeout(() => {
+        if (this.state.hasError) {
+          console.log('[ErrorBoundary] Auto-reloading application...');
+          window.location.reload();
+        }
+      }, 3000);
+    }
+  }
+
   handleReset = () => {
     this.setState({ hasError: false, error: null });
     // Don't reload the entire page, just reset the error state
@@ -44,7 +57,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="space-y-2">
               <h1 className="text-2xl font-bold">Something went wrong</h1>
               <p className="text-sm text-muted-foreground">
-                The application encountered an unexpected error. Try resetting the page or contact support if the issue persists.
+                The application encountered an unexpected error. Reloading automatically in 3 seconds...
               </p>
             </div>
 

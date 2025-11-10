@@ -5,6 +5,8 @@ import { setupVite, serveStatic, log } from "./vite";
 import { seedDummyData } from "./seedData";
 import { connectToMongoDB } from "./mongodb";
 import authRoutes from "./auth-routes";
+import { initRealtime } from "./services/realtime";
+import { initMeetRoomsSocket } from "./services/meetRoomsSocket";
 
 const app = express();
 
@@ -91,6 +93,29 @@ app.use((req, res, next) => {
   } else {
     serveStatic(app);
   }
+  initRealtime(server);
+  initMeetRoomsSocket(server);
+
+  const upgradeListeners = server.listeners("upgrade");
+  const viteUpgradeListener = upgradeListeners.find((fn) => fn.name === "hmrServerWsListener");
+  const otherUpgradeListeners = upgradeListeners.filter((fn) => fn !== viteUpgradeListener);
+
+  server.removeAllListeners("upgrade");
+  server.on("upgrade", (req, socket, head) => {
+    const protocolHeader = req.headers["sec-websocket-protocol"];
+    const protocols = protocolHeader
+      ?.split(",")
+      .map((value) => value.trim());
+
+    if (protocols?.includes("vite-hmr") && viteUpgradeListener) {
+      viteUpgradeListener.call(server, req, socket, head);
+      return;
+    }
+
+    for (const listener of otherUpgradeListeners) {
+      listener.call(server, req, socket, head);
+    }
+  });
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.

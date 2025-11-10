@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { queryClient } from "@/lib/queryClient";
+import { getRealtimeWebSocketUrl } from "@/utils/wsConfig";
 
 type RealtimeMessage = {
   event?: string;
@@ -39,8 +40,8 @@ export function useRealtimeSubscriptions() {
       if (isStopped) return;
 
       try {
-        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-        const wsUrl = `${protocol}://${window.location.host}/ws`;
+        const wsUrl = getRealtimeWebSocketUrl();
+        console.log('[useRealtime] Connecting to WebSocket:', wsUrl);
         const socket = new WebSocket(wsUrl);
         socketRef.current = socket;
 

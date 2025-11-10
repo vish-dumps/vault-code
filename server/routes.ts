@@ -34,8 +34,8 @@ import {
   calculateComboBonus
 } from "@shared/gamification";
 import cron from "node-cron";
-import { initRealtime, notifyUser } from "./services/realtime";
-import { initMeetRoomsSocket, closeRoom } from "./services/meetRoomsSocket";
+import { notifyUser } from "./services/realtime";
+import { closeRoom } from "./services/meetRoomsSocket";
 import { computeWeeklyLeaderboard } from "./services/leaderboard";
 import { createAnswerRouter } from "./controllers/answers";
 import { createSocialRouter } from "./controllers/social";
@@ -2491,8 +2491,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
-  initRealtime(httpServer);
-  initMeetRoomsSocket(httpServer);
 
   cron.schedule("0 0 * * 1", async () => {
     try {
