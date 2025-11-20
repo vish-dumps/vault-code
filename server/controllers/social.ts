@@ -238,6 +238,8 @@ const profileUpdateSchema = z
   .object({
     displayName: z.string().trim().min(1).max(80).optional(),
     name: z.string().trim().min(1).max(80).optional(),
+    leetcodeUsername: z.string().trim().max(120).optional(),
+    codeforcesUsername: z.string().trim().max(120).optional(),
     bio: z.string().trim().max(500).optional(),
     college: z.string().trim().max(120).optional(),
     profileVisibility: z.enum(["public", "friends"]).optional(),
@@ -259,7 +261,27 @@ const profileUpdateSchema = z
       .optional(),
     avatarType: z.enum(["initials", "random", "custom"]).optional(),
     avatarGender: z.enum(["male", "female"]).optional(),
-    customAvatarUrl: z.string().url().max(300).optional(),
+    customAvatarUrl: z
+      .string()
+      .trim()
+      .max(1000)
+      .refine(
+        (value) =>
+          !value ||
+          value.startsWith("http://") ||
+          value.startsWith("https://") ||
+          value.startsWith("data:"),
+        { message: "Custom avatar must be a valid URL or data URI." }
+      )
+      .optional()
+      .nullable(),
+    profileImage: z
+      .string()
+      .trim()
+      .max(6_000_000)
+      .optional()
+      .nullable(),
+    randomAvatarSeed: z.coerce.number().int().nonnegative().optional().nullable(),
   })
   .strict();
 
@@ -1127,11 +1149,36 @@ export function createSocialRouter() {
       const userId = getUserId(req);
       const payload = profileUpdateSchema.parse(req.body);
 
+      const updatePayload: Partial<User> = { ...payload };
+
       if (payload.handle) {
-        payload.handle = normalizeHandleQuery(payload.handle);
+        updatePayload.handle = normalizeHandleQuery(payload.handle);
       }
 
-      const user = await mongoStorage.updateUser(userId, payload as Partial<User>);
+      if (payload.profileImage !== undefined) {
+        updatePayload.profileImage = payload.profileImage ?? null;
+        // If an image is provided, prefer custom avatar; otherwise respect any explicit avatarType
+        if (payload.profileImage) {
+          updatePayload.avatarType = "custom";
+        } else if (payload.avatarType) {
+          updatePayload.avatarType = payload.avatarType;
+        }
+      }
+
+      if (payload.customAvatarUrl !== undefined) {
+        updatePayload.customAvatarUrl = payload.customAvatarUrl ?? null;
+        if (payload.customAvatarUrl) {
+          updatePayload.avatarType = payload.avatarType ?? "custom";
+        } else if (payload.avatarType) {
+          updatePayload.avatarType = payload.avatarType;
+        }
+      }
+
+      if (payload.randomAvatarSeed !== undefined) {
+        updatePayload.randomAvatarSeed = payload.randomAvatarSeed ?? null;
+      }
+
+      const user = await mongoStorage.updateUser(userId, updatePayload);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }

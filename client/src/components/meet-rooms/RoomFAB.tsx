@@ -95,9 +95,6 @@ export function RoomFAB({ className = "" }: RoomFABProps) {
       <MeetModal
         open={showCreateModal}
         onOpenChange={setShowCreateModal}
-        onCreate={async (meetLink) => {
-          // This will be handled by the modal's internal logic
-        }}
       />
 
       <JoinRoomModal
