@@ -1,0 +1,25 @@
+[33mcc09dcb[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m v4.1x profile pic fixed
+[33m4c3f8f1[m v4.1 hard reset problem
+[33m59d3863[m v4.0 added stable live rooms- to fix the profile pic and reload white screen errors
+[33mf2e38da[m v3.2 fixed feedback, extension, dashboard --stable now
+[33m92c5502[m v3.1 added forgot pass,
+[33m01f0f6b[m v3.0 added friends social platform - still need changes
+[33mff1311b[m v2.2 added XP system,auto tracking of coding platforms
+[33m505289d[m v2.1 otp enabled many changes
+[33md4b8631[m v2.1 added otp login
+[33m57e059f[m v2.1 added gmail smtp for otp
+[33m6d39cc6[m Update .env
+[33mc19beb2[m v2.0 added extension to automate saving
+[33mf656e64[m v1.6 Improved UI of both app and login page
+[33m1990e16[m v1.5 Improved the login page ui and fixed scrollability of home dashboard
+[33m51ea413[m v1.4 UI improvement, need to make dashboard unscrollable
+[33m23d0372[m v1.3 UI changes
+[33mb8edef4[m v1.2 , integrated jwt, login, mongodb
+[33m9be9533[m v1.1 working fine
+[33md454110[m v1 working
+[33meaf579e[m[33m ([m[1;31mgitsafe-backup/main[m[33m)[m Improve the interface for adding new coding questions
+[33m8839108[m Improve the way data is fetched for specific pages
+[33m7c3d351[m Improve question vault and dashboard functionality
+[33m3b917da[m Add backend functionality for managing questions and their approaches
+[33mac91d5b[m Set up the initial application structure and UI components
+[33mf9c1d74[m Initial commit

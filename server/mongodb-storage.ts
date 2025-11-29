@@ -121,7 +121,7 @@ export class MongoStorage implements IStorage {
       showProgressGraphs,
       streakReminders,
     });
-    
+
     await user.save();
     return this.mapUserToSchema(user);
   }
@@ -457,7 +457,7 @@ export class MongoStorage implements IStorage {
       updatePayload,
       { new: true }
     );
-    
+
     if (!question) return undefined;
 
     const approaches = await ApproachModel.find({ questionId: id });
@@ -600,28 +600,29 @@ export class MongoStorage implements IStorage {
       xpVisibility: user.xpVisibility ?? "public",
       showProgressGraphs: user.showProgressGraphs ?? true,
       streakReminders: user.streakReminders ?? true,
+      autoApplyStreakFreeze: user.autoApplyStreakFreeze ?? false,
       rewardsInventory: user.rewardsInventory
         ? user.rewardsInventory.map((item: any) => ({
-            id: item.id ?? item.instanceId ?? item.rewardId,
-            rewardId: item.rewardId,
-            instanceId: item.instanceId ?? item.id ?? item.rewardId,
-            status: item.status ?? "available",
-            earnedAt: item.earnedAt ?? user.createdAt,
-            usedAt: item.usedAt ?? null,
-            metadata: item.metadata ?? null,
-          }))
+          id: item.id ?? item.instanceId ?? item.rewardId,
+          rewardId: item.rewardId,
+          instanceId: item.instanceId ?? item.id ?? item.rewardId,
+          status: item.status ?? "available",
+          earnedAt: item.earnedAt ?? user.createdAt,
+          usedAt: item.usedAt ?? null,
+          metadata: item.metadata ?? null,
+        }))
         : [],
       rewardEffects: user.rewardEffects
         ? user.rewardEffects.map((effect: any) => ({
-            id: effect.id ?? effect.instanceId ?? effect.rewardId,
-            rewardId: effect.rewardId,
-            instanceId: effect.instanceId ?? effect.id ?? effect.rewardId,
-            type: effect.type,
-            activatedAt: effect.activatedAt ?? user.createdAt,
-            expiresAt: effect.expiresAt ?? null,
-            usesRemaining: effect.usesRemaining ?? null,
-            metadata: effect.metadata ?? null,
-          }))
+          id: effect.id ?? effect.instanceId ?? effect.rewardId,
+          rewardId: effect.rewardId,
+          instanceId: effect.instanceId ?? effect.id ?? effect.rewardId,
+          type: effect.type,
+          activatedAt: effect.activatedAt ?? user.createdAt,
+          expiresAt: effect.expiresAt ?? null,
+          usesRemaining: effect.usesRemaining ?? null,
+          metadata: effect.metadata ?? null,
+        }))
         : [],
       lastRewardXpCheckpoint: user.lastRewardXpCheckpoint ?? user.xp ?? 0,
     };

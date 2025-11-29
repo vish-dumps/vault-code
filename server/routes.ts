@@ -547,16 +547,16 @@ async function checkAndAwardProfileCompletionBonus(userId: string): Promise<void
   if (!user) return;
 
   const { percentage } = calculateProfileCompletion(user);
-  
+
   // Check if profile is 100% complete and user hasn't received the bonus yet
   if (percentage === 100 && !user.badgesEarned?.includes('profile_complete_100')) {
     const PROFILE_COMPLETION_BONUS = 150;
-    
+
     // Award XP
     await applyXp(userId, PROFILE_COMPLETION_BONUS, {
       badgesEarned: [...(user.badgesEarned || []), 'profile_complete_100']
     });
-    
+
     // Create notification
     try {
       await Notification.create({
@@ -582,7 +582,7 @@ async function updateStreakOnActivity(userId: string): Promise<void> {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const lastActive = user.lastActiveDate ? new Date(user.lastActiveDate) : null;
   if (lastActive) {
     lastActive.setHours(0, 0, 0, 0);
@@ -622,16 +622,16 @@ async function updateStreakOnActivity(userId: string): Promise<void> {
       } else if (user.autoApplyStreakFreeze) {
         // Auto-apply streak freeze if enabled
         const rewardsInventory = Array.isArray(user.rewardsInventory) ? [...user.rewardsInventory] : [];
-        const freezeReward = rewardsInventory.find((item: any) => 
-          item.status === "available" && 
+        const freezeReward = rewardsInventory.find((item: any) =>
+          item.status === "available" &&
           (item.rewardId.includes("streak-freeze") || item.instanceId.includes("streak-freeze"))
         );
-        
+
         if (freezeReward) {
           // Consume the streak freeze
           freezeReward.status = "consumed";
           freezeReward.usedAt = new Date();
-          
+
           // Add freeze effect
           const { randomUUID } = await import("crypto");
           rewardEffects.push({
@@ -643,10 +643,10 @@ async function updateStreakOnActivity(userId: string): Promise<void> {
             usesRemaining: 0, // Already consumed for this miss
             metadata: { autoApplied: true },
           } as any);
-          
+
           effectsUpdated = true;
           newStreak = Math.max(1, (user.streak ?? 0) + 1);
-          
+
           // Update inventory
           await mongoStorage.updateUser(userId, { rewardsInventory });
         } else {
@@ -696,11 +696,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getUserId(req);
       const id = req.params.id;
       const question = await mongoStorage.getQuestion(id, userId);
-      
+
       if (!question) {
         return res.status(404).json({ error: "Question not found" });
       }
-      
+
       res.json(question);
     } catch (error) {
       console.error("Error fetching question:", error);
@@ -923,8 +923,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userBeforeUpdate?.lastSolveAt instanceof Date
           ? userBeforeUpdate.lastSolveAt
           : userBeforeUpdate?.lastSolveAt
-          ? new Date(userBeforeUpdate.lastSolveAt)
-          : null;
+            ? new Date(userBeforeUpdate.lastSolveAt)
+            : null;
       const previousComboCount = userBeforeUpdate?.solveComboCount ?? 0;
       const comboWindowMs = XP_COMBO_RULES.windowMinutes * 60 * 1000;
       let comboCount = 1;
@@ -950,7 +950,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         problemId: normalizedProblemId,
         solvedAt,
         xpAwarded: totalXpAward,
-        approaches: [],
+        approaches: [] as { name: string; language: string; code: string; notes?: string }[],
       };
 
       if (payload.submission?.code && payload.submission.code.trim().length > 0) {
@@ -1093,11 +1093,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = req.params.id;
       const data = updateQuestionSchema.parse(req.body);
       const question = await mongoStorage.updateQuestion(id, userId, data);
-      
+
       if (!question) {
         return res.status(404).json({ error: "Question not found" });
       }
-      
+
       res.json(question);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1113,11 +1113,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getUserId(req);
       const id = req.params.id;
       const success = await mongoStorage.deleteQuestion(id, userId);
-      
+
       if (!success) {
         return res.status(404).json({ error: "Question not found" });
       }
-      
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting question:", error);
@@ -1149,11 +1149,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const approachId = req.params.approachId;
       const data = updateApproachSchema.parse(req.body);
       const approach = await mongoStorage.updateApproach(questionId, approachId, userId, data);
-      
+
       if (!approach) {
         return res.status(404).json({ error: "Approach not found" });
       }
-      
+
       res.json(approach);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1170,11 +1170,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const questionId = req.params.id;
       const approachId = req.params.approachId;
       const success = await mongoStorage.deleteApproach(questionId, approachId, userId);
-      
+
       if (!success) {
         return res.status(404).json({ error: "Approach not found" });
       }
-      
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting approach:", error);
@@ -1245,29 +1245,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       contestsCacheTimestamp = Date.now();
 
       res.json(cachedContests);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const isAbortError =
-          error instanceof Error &&
-          (error.name === "AbortError" || errorMessage.toLowerCase().includes("aborted"));
-        console.warn(
-          `Error fetching contests${isAbortError ? " (timeout)" : ""}:`,
-          errorMessage
-        );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isAbortError =
+        error instanceof Error &&
+        (error.name === "AbortError" || errorMessage.toLowerCase().includes("aborted"));
+      console.warn(
+        `Error fetching contests${isAbortError ? " (timeout)" : ""}:`,
+        errorMessage
+      );
 
-        const fallback = cachedContests.length ? cachedContests : FALLBACK_CONTESTS;
-        cachedContests = fallback;
-        contestsCacheTimestamp = Date.now();
-        res.json(fallback);
-      }
-    });
+      const fallback = cachedContests.length ? cachedContests : FALLBACK_CONTESTS;
+      cachedContests = fallback;
+      contestsCacheTimestamp = Date.now();
+      res.json(fallback);
+    }
+  });
 
   // User profile routes
   app.get("/api/user/profile", async (req: AuthRequest, res) => {
     try {
       const userId = getUserId(req);
       let user = await mongoStorage.getUser(userId);
-      
+
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -1275,7 +1275,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if we need to reset daily progress
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       const lastReset = user.lastResetDate ? new Date(user.lastResetDate) : null;
       if (lastReset) {
         lastReset.setHours(0, 0, 0, 0);
@@ -1311,13 +1311,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      
+
       const profileCompletion = calculateProfileCompletion(user);
       const userResponse = {
         ...(user as any).toObject ? (user as any).toObject() : user,
         profileCompletion,
       };
-      
+
       res.json(userResponse);
     } catch (error) {
       console.error("Error fetching user profile:", error);
@@ -1641,8 +1641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (dailyGoal > 0 && dailyProgress < dailyGoal) {
         const remaining = dailyGoal - dailyProgress;
         suggestions.push(
-          `Solve ${remaining} more ${remaining === 1 ? "problem" : "problems"} to secure +${
-            XP_REWARDS.dailyGoalBonus
+          `Solve ${remaining} more ${remaining === 1 ? "problem" : "problems"} to secure +${XP_REWARDS.dailyGoalBonus
           } XP.`
         );
       } else if (!goalAchievedToday && dailyGoal > 0) {
@@ -1706,7 +1705,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select("title platform difficulty solvedAt dateSaved xpAwarded source link")
         .lean();
 
-      const xpHistory = recentXpEntries.map((entry) => {
+      const xpHistory: {
+        id: string;
+        title: string;
+        platform: string;
+        xp: number;
+        timestamp: string;
+        difficulty: string | null;
+        type: "auto" | "manual" | "goal";
+        link: string | null;
+      }[] = recentXpEntries.map((entry) => {
         const timestamp =
           (entry.solvedAt as Date | null) ??
           (entry.dateSaved as Date | null) ??
@@ -1901,10 +1909,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getUserId(req);
       const data = insertSnippetSchema.parse(req.body);
       const snippet = await mongoStorage.createSnippet(data, userId);
-      
+
       // Update streak on snippet add
       await updateStreakOnActivity(userId);
-      
+
       res.status(201).json(snippet);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1937,12 +1945,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Clean up old todos first
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      await Todo.deleteMany({ 
-        userId, 
+      await Todo.deleteMany({
+        userId,
         createdAt: { $lt: today },
         retainUntil: { $exists: false }
       });
-      
+
       const todos = await Todo.find({ userId }).sort({ order: 1, createdAt: -1 });
       res.json(todos.map(todo => ({
         id: todo._id.toString(),
@@ -1963,7 +1971,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = getUserId(req);
       const { title } = req.body;
-      
+
       if (!title || !title.trim()) {
         return res.status(400).json({ error: "Title is required" });
       }
@@ -1978,9 +1986,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         completed: false,
         order: newOrder
       });
-      
+
       await todo.save();
-      
+
       res.status(201).json({
         id: todo._id.toString(),
         title: todo.title,
@@ -2047,20 +2055,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = getUserId(req);
       const { id } = req.params;
-      
+
       // Mark as completed before deleting for consistency tracking
       await Todo.findOneAndUpdate(
         { _id: id, userId },
         { completed: true, completedAt: new Date() },
         { new: true }
       );
-      
+
       const result = await Todo.findOneAndDelete({ _id: id, userId });
-      
+
       if (!result) {
         return res.status(404).json({ error: "Todo not found" });
       }
-      
+
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting todo:", error);
@@ -2073,7 +2081,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = getUserId(req);
       const user = await mongoStorage.getUser(userId);
-      
+
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2092,22 +2100,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = getUserId(req);
       const { todoIds } = req.body; // Array of todo IDs in new order
-      
+
       if (!Array.isArray(todoIds)) {
         return res.status(400).json({ error: "todoIds must be an array" });
       }
 
       // Update order for each todo
-      const updatePromises = todoIds.map((id, index) => 
+      const updatePromises = todoIds.map((id, index) =>
         Todo.findOneAndUpdate(
           { _id: id, userId },
           { order: index },
           { new: true }
         )
       );
-      
+
       await Promise.all(updatePromises);
-      
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error reordering todos:", error);
@@ -2120,17 +2128,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = getUserId(req);
       const { streakGoal, dailyGoal } = req.body;
-      
+
       const updateData: any = {};
       if (streakGoal !== undefined) updateData.streakGoal = streakGoal;
       if (dailyGoal !== undefined) updateData.dailyGoal = dailyGoal;
-      
+
       const user = await mongoStorage.updateUser(userId, updateData);
-      
+
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      
+
       res.json(user);
     } catch (error) {
       console.error("Error updating goals:", error);
@@ -2143,7 +2151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = getUserId(req);
       const user = await mongoStorage.getUser(userId);
-      
+
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -2186,7 +2194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Send thank you email to user
       try {
-        await sendThankYouEmail(user.email, user.username, rating);
+        await sendThankYouEmail(user.email ?? "", user.username, rating);
       } catch (emailError) {
         console.error("Failed to send thank you email:", emailError);
         // Don't fail the request if email fails
@@ -2212,7 +2220,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const feedbacks = await Feedback.find({ userId })
         .sort({ createdAt: -1 })
         .select("-__v");
-      
+
       res.json(feedbacks);
     } catch (error) {
       console.error("Error fetching feedback:", error);
@@ -2289,10 +2297,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log('[Rooms] POST /api/rooms called');
       console.log('[Rooms] Request body:', req.body);
-      
+
       const userId = getUserId(req);
       console.log('[Rooms] User ID:', userId);
-      
+
       const user = await mongoStorage.getUser(userId);
       if (!user) {
         console.error('[Rooms] User not found:', userId);
@@ -2301,7 +2309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { meetLink } = req.body;
       console.log('[Rooms] meetLink from body:', meetLink);
-      
+
       if (!meetLink || typeof meetLink !== "string") {
         console.error('[Rooms] Invalid meetLink:', meetLink);
         return res.status(400).json({ error: "Meet link is required" });
@@ -2316,7 +2324,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const roomId = generateRoomId();
       console.log('[Rooms] Generated room ID:', roomId);
-      
+
       const room = new Room({
         roomId,
         meetLink: trimmed,
@@ -2438,7 +2446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             },
           });
           await notification.save();
-          
+
           // Send real-time notification
           notifyUser(friendId, "notifications:new", {
             id: notification._id.toString(),
@@ -2448,7 +2456,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             metadata: notification.metadata,
             createdAt: notification.createdAt,
           });
-          
+
           invited++;
         } catch (err) {
           console.error(`Failed to invite friend ${friendId}:`, err);

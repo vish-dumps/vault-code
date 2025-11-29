@@ -10,6 +10,7 @@ export type NotificationType =
   | 'reward';
 
 export interface INotification extends Document {
+  _id: Types.ObjectId;
   userId: Types.ObjectId;
   type: NotificationType;
   title: string;
