@@ -2409,6 +2409,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get active rooms from friends
+  app.get("/api/rooms/friends/active", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+
+      // 1. Get all friends
+      const friendships = await Friendship.find({
+        $or: [
+          { requesterId: new Types.ObjectId(userId), status: "accepted" },
+          { recipientId: new Types.ObjectId(userId), status: "accepted" }
+        ]
+      });
+
+      const friendIds = friendships.map(f =>
+        f.requesterId.toString() === userId
+          ? f.recipientId
+          : f.requesterId
+      );
+
+      if (friendIds.length === 0) {
+        return res.json([]);
+      }
+
+      // 2. Find active rooms created by friends (last 24 hours)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const activeRooms = await Room.find({
+        createdBy: { $in: friendIds },
+        endedAt: null,
+        createdAt: { $gt: oneDayAgo }
+      })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+
+      res.json(activeRooms.map(room => ({
+        roomId: room.roomId,
+        meetLink: room.meetLink,
+        createdAt: room.createdAt,
+        createdByName: room.createdByName,
+        createdBy: room.createdBy,
+        questionLink: room.questionLink
+      })));
+
+    } catch (error) {
+      console.error("Error fetching active friend rooms:", error);
+      res.status(500).json({ error: "Failed to fetch active rooms" });
+    }
+  });
+
   // Invite friends to a room
   app.post("/api/rooms/:id/invite", async (req: AuthRequest, res) => {
     try {

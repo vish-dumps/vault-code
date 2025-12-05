@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { Bell, UserPlus, UserCheck, UserX, Trash2 } from "lucide-react";
+import { Bell, UserPlus, UserCheck, UserX, Trash2, Video } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -19,7 +19,7 @@ type NotificationActor = {
 
 type AppNotification = {
   id: string;
-  type: "friend_request" | "friend_accepted" | "friend_declined" | "system";
+  type: "friend_request" | "friend_accepted" | "friend_declined" | "system" | "room_invite";
   title: string;
   message: string;
   metadata?: {
@@ -39,6 +39,7 @@ const notificationIcons: Record<AppNotification["type"], JSX.Element> = {
   friend_request: <UserPlus className="h-4 w-4 text-blue-500" />,
   friend_accepted: <UserCheck className="h-4 w-4 text-green-500" />,
   friend_declined: <UserX className="h-4 w-4 text-red-500" />,
+  room_invite: <Video className="h-4 w-4 text-purple-500" />,
   system: <Bell className="h-4 w-4 text-muted-foreground" />,
 };
 
@@ -112,6 +113,10 @@ export function NotificationPopover() {
       setLocation("/community/friends?tab=requests");
     } else if (notification.type === "friend_accepted") {
       setLocation("/community/friends");
+    } else if (notification.type === "room_invite" && notification.metadata?.roomId) {
+      const meetLink = notification.metadata.meetLink as string | undefined;
+      const url = `/room/${notification.metadata.roomId}${meetLink ? `?meet=${encodeURIComponent(meetLink)}` : ''}`;
+      setLocation(url);
     }
   };
 
@@ -220,11 +225,10 @@ export function NotificationPopover() {
                       transition={{ delay: index * 0.05 }}
                       whileHover={{ scale: 1.01, x: 2 }}
                       onClick={() => handleNotificationClick(notification)}
-                      className={`rounded-lg border p-3 cursor-pointer transition-colors ${
-                        isRead
-                          ? "bg-secondary/40 hover:bg-secondary/60"
-                          : "bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/30 border-blue-200/50 dark:border-blue-800/40"
-                      }`}
+                      className={`rounded-lg border p-3 cursor-pointer transition-colors ${isRead
+                        ? "bg-secondary/40 hover:bg-secondary/60"
+                        : "bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/30 border-blue-200/50 dark:border-blue-800/40"
+                        }`}
                     >
                       <div className="flex gap-3">
                         <div className="flex-shrink-0 mt-0.5">
@@ -251,6 +255,18 @@ export function NotificationPopover() {
                           <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                             {notification.message}
                           </p>
+                          {notification.type === "room_invite" && (
+                            <Button
+                              size="sm"
+                              className="mt-2 w-full bg-purple-600 hover:bg-purple-700 text-white h-7 text-xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleNotificationClick(notification);
+                              }}
+                            >
+                              Join Room
+                            </Button>
+                          )}
                         </div>
                       </div>
                       <div className="mt-3 flex items-center justify-end gap-2">

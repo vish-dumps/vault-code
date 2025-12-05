@@ -62,11 +62,14 @@ function AuthenticatedRoutes() {
   );
 }
 
+import LandingPage from "@/pages/landing-page";
+
 function UnauthenticatedRoutes() {
   return (
     <Switch>
+      <Route path="/" component={LandingPage} />
       <Route path="/auth" component={AuthPage} />
-      <Route component={AuthPage} />
+      <Route component={LandingPage} />
     </Switch>
   );
 }

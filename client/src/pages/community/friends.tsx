@@ -26,6 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { InsightsDashboard } from "@/components/community/InsightsDashboard";
 
 type FriendSummary = {
   id: string;
@@ -129,6 +130,15 @@ type ActivityResponse = {
     };
     details?: Record<string, unknown>;
   }>;
+};
+
+type ActiveRoom = {
+  roomId: string;
+  meetLink: string;
+  createdAt: string;
+  createdByName: string;
+  createdBy: string;
+  questionLink?: string | null;
 };
 
 function getAvatarUrl(
@@ -258,16 +268,16 @@ export default function CommunityFriends() {
       await apiRequest("POST", `/api/friends/${friendId}/poke`, { message });
     },
     onSuccess: () => {
-      toast({ 
-        title: "Poke sent! 👋", 
-        description: "Your friend will be notified to maintain their streak." 
+      toast({
+        title: "Poke sent! 👋",
+        description: "Your friend will be notified to maintain their streak."
       });
     },
     onError: () => {
-      toast({ 
-        title: "Error", 
-        description: "Failed to send poke.", 
-        variant: "destructive" 
+      toast({
+        title: "Error",
+        description: "Failed to send poke.",
+        variant: "destructive"
       });
     },
   });
@@ -330,6 +340,16 @@ export default function CommunityFriends() {
       const res = await apiRequest("GET", "/api/activity?scope=friends");
       return res.json();
     },
+  });
+
+  const { data: activeRooms } = useQuery<ActiveRoom[]>({
+    queryKey: ["/api/rooms/friends/active"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/rooms/friends/active");
+      return res.json();
+    },
+    // Refresh every 30 seconds to keep room status current
+    refetchInterval: 30000,
   });
 
   const friendActivities = activityData?.activities ?? [];
@@ -588,467 +608,350 @@ export default function CommunityFriends() {
       </Sheet>
 
       <div className="p-6 space-y-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold">Friends & Connections</h1>
-        <p className="text-muted-foreground">
-          Connect with other coders, collaborate on problems, and track each other&apos;s progress.
-        </p>
-      </div>
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-bold">Friends & Connections</h1>
+          <p className="text-muted-foreground">
+            Connect with other coders, collaborate on problems, and track each other&apos;s progress.
+          </p>
+        </div>
 
-      <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)}>
-        <TabsList className="grid w-full grid-cols-4 md:w-auto">
-          <TabsTrigger value="friends">Friends</TabsTrigger>
-          <TabsTrigger value="requests">Requests</TabsTrigger>
-          <TabsTrigger value="discover">Discover</TabsTrigger>
-          <TabsTrigger value="insights">Insights</TabsTrigger>
-        </TabsList>
-      </Tabs>
+        <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)}>
+          <TabsList className="grid w-full grid-cols-4 md:w-auto">
+            <TabsTrigger value="friends">Friends</TabsTrigger>
+            <TabsTrigger value="requests">Requests</TabsTrigger>
+            <TabsTrigger value="discover">Discover</TabsTrigger>
+            <TabsTrigger value="insights">Insights</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-      {tab === "friends" && (
-        <Card>
-          <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              <CardTitle className="text-base font-semibold">Your friends</CardTitle>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              Total {friendsQuery.data?.total ?? 0} | Mutual friends {friendsQuery.data?.mutualCount ?? 0}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-4">
-              {friendsQuery.isLoading && (
-                <div className="text-center text-sm text-muted-foreground">
-                  Loading friends...
-                </div>
-              )}
-              {!friendsQuery.isLoading && friends.length === 0 && (
-                <div className="text-center text-sm text-muted-foreground">
-                  You don&apos;t have any friends yet. Switch to Discover to start connecting!
-                </div>
-              )}
-              {friends.map((friend) => {
-                const avatarUrl = getAvatarUrl(friend);
-                const streakEndingSoon = (friend.streak ?? 0) > 0 && (friend.dailyProgress ?? 0) === 0;
-                return (
-                  <div key={friend.id} className="flex items-start justify-between rounded border p-4">
-                    <div className="flex items-start gap-3">
-                      <Avatar className="h-10 w-10">
-                        {avatarUrl && <AvatarImage src={avatarUrl} alt={friend.displayName ?? friend.username} />}
-                        <AvatarFallback>
-                          {(friend.displayName ?? friend.username).charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-foreground">
-                            {friend.displayName ?? friend.username}
-                          </span>
-                          {friend.badge && (
-                            <Badge variant="secondary" className="text-xs">
-                              {friend.badge}
-                            </Badge>
-                          )}
-                          {friend.isMutual && <Badge variant="outline">Mutual</Badge>}
-                        </div>
-                        <div className="text-xs text-muted-foreground">{friend.handle}</div>
-                        <div className="flex items-center gap-2">
-                          <div className="text-xs font-semibold text-amber-600">
-                            {friend.xp ?? 0} XP
+        {tab === "friends" && (
+          <Card>
+            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base font-semibold">Your friends</CardTitle>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Total {friendsQuery.data?.total ?? 0} | Mutual friends {friendsQuery.data?.mutualCount ?? 0}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-4">
+                {friendsQuery.isLoading && (
+                  <div className="text-center text-sm text-muted-foreground">
+                    Loading friends...
+                  </div>
+                )}
+                {!friendsQuery.isLoading && friends.length === 0 && (
+                  <div className="text-center text-sm text-muted-foreground">
+                    You don&apos;t have any friends yet. Switch to Discover to start connecting!
+                  </div>
+                )}
+                {friends.map((friend) => {
+                  const avatarUrl = getAvatarUrl(friend);
+                  const streakEndingSoon = (friend.streak ?? 0) > 0 && (friend.dailyProgress ?? 0) === 0;
+                  return (
+                    <div key={friend.id} className="flex items-start justify-between rounded border p-4">
+                      <div className="flex items-start gap-3">
+                        <Avatar className="h-10 w-10">
+                          {avatarUrl && <AvatarImage src={avatarUrl} alt={friend.displayName ?? friend.username} />}
+                          <AvatarFallback>
+                            {(friend.displayName ?? friend.username).charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-foreground">
+                              {friend.displayName ?? friend.username}
+                            </span>
+                            {friend.badge && (
+                              <Badge variant="secondary" className="text-xs">
+                                {friend.badge}
+                              </Badge>
+                            )}
+                            {friend.isMutual && <Badge variant="outline">Mutual</Badge>}
                           </div>
-                          {(friend.streak ?? 0) > 0 && (
-                            <div className="flex items-center gap-1 text-xs">
-                              <span>🔥</span>
-                              <span className="font-medium">{friend.streak} day streak</span>
+                          <div className="text-xs text-muted-foreground">{friend.handle}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-xs font-semibold text-amber-600">
+                              {friend.xp ?? 0} XP
                             </div>
-                          )}
+                            {(friend.streak ?? 0) > 0 && (
+                              <div className="flex items-center gap-1 text-xs">
+                                <span>🔥</span>
+                                <span className="font-medium">{friend.streak} day streak</span>
+                              </div>
+                            )}
+                          </div>
+                          {friend.bio && <p className="text-xs text-muted-foreground line-clamp-2">{friend.bio}</p>}
                         </div>
-                        {friend.bio && <p className="text-xs text-muted-foreground line-clamp-2">{friend.bio}</p>}
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setLocation(`/community/friends/${friend.id}`)}
+                        >
+                          <Sparkles className="mr-1 h-4 w-4" />
+                          View Profile
+                        </Button>
+                        {streakEndingSoon && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                            onClick={() => {
+                              pokeFriendMutation.mutate({
+                                friendId: friend.id,
+                                message: "Hey! Don't forget to maintain your streak today! 🔥"
+                              });
+                            }}
+                          >
+                            <Bell className="mr-1 h-4 w-4" />
+                            Poke
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex flex-col items-end gap-2">
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        {tab === "requests" && (
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader className="flex items-center gap-2">
+                <UserCheck className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base font-semibold">Incoming requests</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {requestsQuery.isLoading && (
+                  <div className="text-sm text-muted-foreground">Loading...</div>
+                )}
+                {!requestsQuery.isLoading && incoming.length === 0 && (
+                  <div className="text-sm text-muted-foreground">No incoming requests.</div>
+                )}
+                {incoming.map((request) => (
+                  <div key={request.id} className="flex items-start justify-between rounded border p-3">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">
+                        {request.requester.displayName ?? request.requester.username}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{request.requester.handle}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(request.createdAt), { addSuffix: true })}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
                       <Button
-                        variant="outline"
                         size="sm"
-                        onClick={() => setLocation(`/community/friends/${friend.id}`)}
+                        variant="default"
+                        onClick={() =>
+                          respondRequestMutation.mutate({ id: request.id, action: "accept" })
+                        }
                       >
-                        <Sparkles className="mr-1 h-4 w-4" />
-                        View Profile
+                        Accept
                       </Button>
-                      {streakEndingSoon && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                          onClick={() => {
-                            pokeFriendMutation.mutate({
-                              friendId: friend.id,
-                              message: "Hey! Don't forget to maintain your streak today! 🔥"
-                            });
-                          }}
-                        >
-                          <Bell className="mr-1 h-4 w-4" />
-                          Poke
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          respondRequestMutation.mutate({ id: request.id, action: "decline" })
+                        }
+                      >
+                        Decline
+                      </Button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-      </CardContent>
-    </Card>
-  )}
-      {tab === "requests" && (
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader className="flex items-center gap-2">
-              <UserCheck className="h-5 w-5 text-primary" />
-              <CardTitle className="text-base font-semibold">Incoming requests</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {requestsQuery.isLoading && (
-                <div className="text-sm text-muted-foreground">Loading...</div>
-              )}
-              {!requestsQuery.isLoading && incoming.length === 0 && (
-                <div className="text-sm text-muted-foreground">No incoming requests.</div>
-              )}
-              {incoming.map((request) => (
-                <div key={request.id} className="flex items-start justify-between rounded border p-3">
-                  <div className="flex flex-col">
-                    <span className="font-medium text-foreground">
-                      {request.requester.displayName ?? request.requester.username}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{request.requester.handle}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(request.createdAt), { addSuffix: true })}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={() =>
-                        respondRequestMutation.mutate({ id: request.id, action: "accept" })
-                      }
-                    >
-                      Accept
-                    </Button>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex items-center gap-2">
+                <UserX className="h-5 w-5 text-secondary" />
+                <CardTitle className="text-base font-semibold">Outgoing requests</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {requestsQuery.isLoading && (
+                  <div className="text-sm text-muted-foreground">Loading...</div>
+                )}
+                {!requestsQuery.isLoading && outgoing.length === 0 && (
+                  <div className="text-sm text-muted-foreground">No pending requests.</div>
+                )}
+                {outgoing.map((request) => (
+                  <div key={request.id} className="flex items-start justify-between rounded border p-3">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">
+                        {request.recipient.displayName ?? request.recipient.username}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{request.recipient.handle}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(request.createdAt), { addSuffix: true })}
+                      </span>
+                    </div>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        respondRequestMutation.mutate({ id: request.id, action: "decline" })
+                        respondRequestMutation.mutate({ id: request.id, action: "cancel" })
                       }
                     >
-                      Decline
+                      Cancel
                     </Button>
                   </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
+        {tab === "discover" && (
           <Card>
             <CardHeader className="flex items-center gap-2">
-              <UserX className="h-5 w-5 text-secondary" />
-              <CardTitle className="text-base font-semibold">Outgoing requests</CardTitle>
+              <UserPlus className="h-5 w-5 text-primary" />
+              <CardTitle className="text-base font-semibold">Discover coders</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {requestsQuery.isLoading && (
-                <div className="text-sm text-muted-foreground">Loading...</div>
-              )}
-              {!requestsQuery.isLoading && outgoing.length === 0 && (
-                <div className="text-sm text-muted-foreground">No pending requests.</div>
-              )}
-              {outgoing.map((request) => (
-                <div key={request.id} className="flex items-start justify-between rounded border p-3">
-                  <div className="flex flex-col">
-                    <span className="font-medium text-foreground">
-                      {request.recipient.displayName ?? request.recipient.username}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{request.recipient.handle}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(request.createdAt), { addSuffix: true })}
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      respondRequestMutation.mutate({ id: request.id, action: "cancel" })
-                    }
-                  >
-                    Cancel
-                  </Button>
+            <CardContent className="space-y-4">
+              <Input
+                placeholder="Search by username or handle..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              {search.length <= 1 && (
+                <div className="text-sm text-muted-foreground">
+                  Type at least two characters to search.
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {tab === "discover" && (
-        <Card>
-          <CardHeader className="flex items-center gap-2">
-            <UserPlus className="h-5 w-5 text-primary" />
-            <CardTitle className="text-base font-semibold">Discover coders</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Input
-              placeholder="Search by username or handle..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            {search.length <= 1 && (
-              <div className="text-sm text-muted-foreground">
-                Type at least two characters to search.
+              )}
+              {search.length > 1 && searchQuery.isLoading && (
+                <div className="text-sm text-muted-foreground">Searching...</div>
+              )}
+              {search.length > 1 && !searchQuery.isLoading && searchResults.length === 0 && (
+                <div className="text-sm text-muted-foreground">No users found.</div>
+              )}
+              <div className="grid gap-3 md:grid-cols-2">
+                {searchResults.map((result) => {
+                  const outgoingRequest = outgoingRequestsByUser.get(result.id);
+                  const incomingRequest = incomingRequestsByUser.get(result.id);
+                  const isConnected = result.isFriend;
+                  return (
+                    <div key={result.id} className="flex items-start justify-between rounded border p-3 gap-3">
+                      <div className="flex flex-col gap-1">
+                        <span className="font-semibold text-foreground">
+                          {result.displayName ?? result.username}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{result.handle}</span>
+                        {result.bio && <p className="text-xs text-muted-foreground">{result.bio}</p>}
+                      </div>
+                      {!result.isSelf && (
+                        <div className="flex flex-col items-end gap-2">
+                          {isConnected && (
+                            <Badge variant="secondary" className="text-xs">
+                              Connected
+                            </Badge>
+                          )}
+                          {!isConnected && incomingRequest && (
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() =>
+                                  respondRequestMutation.mutate({ id: incomingRequest.id, action: "accept" })
+                                }
+                                disabled={respondRequestMutation.isPending}
+                              >
+                                Accept
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  respondRequestMutation.mutate({ id: incomingRequest.id, action: "decline" })
+                                }
+                                disabled={respondRequestMutation.isPending}
+                              >
+                                Decline
+                              </Button>
+                            </div>
+                          )}
+                          {!isConnected && !incomingRequest && outgoingRequest && (
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" disabled>
+                                Request sent
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  respondRequestMutation.mutate({ id: outgoingRequest.id, action: "cancel" })
+                                }
+                                disabled={respondRequestMutation.isPending}
+                              >
+                                Retrieve
+                              </Button>
+                            </div>
+                          )}
+                          {!isConnected && !incomingRequest && !outgoingRequest && (
+                            <Button
+                              size="sm"
+                              onClick={() => sendRequestMutation.mutate(result.handle ?? result.username)}
+                              disabled={sendRequestMutation.isPending}
+                            >
+                              Add friend
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            )}
-            {search.length > 1 && searchQuery.isLoading && (
-              <div className="text-sm text-muted-foreground">Searching...</div>
-            )}
-            {search.length > 1 && !searchQuery.isLoading && searchResults.length === 0 && (
-              <div className="text-sm text-muted-foreground">No users found.</div>
-            )}
-            <div className="grid gap-3 md:grid-cols-2">
-              {searchResults.map((result) => {
-                const outgoingRequest = outgoingRequestsByUser.get(result.id);
-                const incomingRequest = incomingRequestsByUser.get(result.id);
-                const isConnected = result.isFriend;
-                return (
-                  <div key={result.id} className="flex items-start justify-between rounded border p-3 gap-3">
-                    <div className="flex flex-col gap-1">
-                      <span className="font-semibold text-foreground">
-                        {result.displayName ?? result.username}
-                      </span>
-                      <span className="text-xs text-muted-foreground">{result.handle}</span>
-                      {result.bio && <p className="text-xs text-muted-foreground">{result.bio}</p>}
-                    </div>
-                    {!result.isSelf && (
-                      <div className="flex flex-col items-end gap-2">
-                        {isConnected && (
-                          <Badge variant="secondary" className="text-xs">
-                            Connected
-                          </Badge>
-                        )}
-                        {!isConnected && incomingRequest && (
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() =>
-                                respondRequestMutation.mutate({ id: incomingRequest.id, action: "accept" })
-                              }
-                              disabled={respondRequestMutation.isPending}
-                            >
-                              Accept
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                respondRequestMutation.mutate({ id: incomingRequest.id, action: "decline" })
-                              }
-                              disabled={respondRequestMutation.isPending}
-                            >
-                              Decline
-                            </Button>
-                          </div>
-                        )}
-                        {!isConnected && !incomingRequest && outgoingRequest && (
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" disabled>
-                              Request sent
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                respondRequestMutation.mutate({ id: outgoingRequest.id, action: "cancel" })
-                              }
-                              disabled={respondRequestMutation.isPending}
-                            >
-                              Retrieve
-                            </Button>
-                          </div>
-                        )}
-                        {!isConnected && !incomingRequest && !outgoingRequest && (
-                          <Button
-                            size="sm"
-                            onClick={() => sendRequestMutation.mutate(result.handle ?? result.username)}
-                            disabled={sendRequestMutation.isPending}
-                          >
-                            Add friend
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {tab === "insights" && (
-        <div className="grid gap-6 xl:grid-cols-2">
-          <Card>
-            <CardHeader className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              <CardTitle className="text-base font-semibold">This week's sprint</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {weeklyQuestionInsights.leaderboard.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Once your friends solve problems this week, their progress will appear here.
-                </p>
-              ) : (
-                <>
-                  <div className="text-sm text-muted-foreground">
-                    {weeklyQuestionInsights.total} problems solved across your circle in the last 7 days.
-                  </div>
-                  <div className="space-y-3">
-                    {weeklyQuestionInsights.leaderboard.map((entry) => (
-                      <div key={entry.name} className="space-y-1">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium text-foreground">{entry.name}</span>
-                          <span className="text-muted-foreground">{entry.count} solved</span>
-                        </div>
-                        <div className="h-2 rounded-full bg-secondary">
-                          <div
-                            className="h-2 rounded-full bg-primary"
-                            style={{ width: `${weeklyQuestionInsights.max > 0 ? (entry.count / weeklyQuestionInsights.max) * 100 : 0}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
             </CardContent>
           </Card>
+        )}
 
-          <Card>
-            <CardHeader className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />
-              <CardTitle className="text-base font-semibold">Streak scoreboard</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {streakLeaders.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No active streaks yet. Encourage your friends to log a solve!</p>
-              ) : (
-                <div className="space-y-2 text-sm">
-                  {streakLeaders.map((friend) => (
-                    <div key={friend.id} className="flex items-center justify-between rounded border px-3 py-2">
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className="font-medium text-foreground">{friend.displayName ?? friend.username}</span>
-                        <span className="text-muted-foreground">{friend.streak ?? 0} days</span>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2"
-                        onClick={() => pokeFriendMutation.mutate({ friendId: friend.id })}
-                        disabled={pokeFriendMutation.isPending}
-                        title="Remind them to maintain their streak"
-                      >
-                        <Bell className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {tab === "insights" && (
+          <InsightsDashboard
+            friends={friends}
+            activities={friendActivities}
+            activeRooms={activeRooms ?? []}
+            currentUser={{
+              id: user?.id ?? "",
+              username: user?.username ?? "",
+              displayName: user?.displayName,
+              xp: user?.xp,
+              streak: user?.streak
+            }}
+          />
+        )}
 
-          <Card>
-            <CardHeader className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              <CardTitle className="text-base font-semibold">Team XP momentum</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {xpLeaders.leaderboard.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Invite friends to CodeVault to start tracking XP momentum together.</p>
-              ) : (
-                <div className="space-y-3">
-                  {xpLeaders.leaderboard.slice(0, 5).map((friend) => (
-                    <div key={friend.id} className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium text-foreground">{friend.displayName ?? friend.username}</span>
-                        <span className="text-muted-foreground">{friend.xp ?? 0} XP</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-secondary">
-                        <div
-                          className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-blue-500"
-                          style={{ width: `${xpLeaders.max > 0 ? ((friend.xp ?? 0) / xpLeaders.max) * 100 : 0}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      </div>
 
-          <Card>
-            <CardHeader className="flex items-center gap-2">
-              <Code2 className="h-5 w-5 text-primary" />
-              <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {friendActivities.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No recent activity from friends.</p>
-              ) : (
-                <div className="space-y-3">
-                  {friendActivities.slice(0, 5).map((activity) => (
-                    <div key={activity.id} className="flex items-start gap-3 text-sm">
-                      <div className="w-2 h-2 rounded-full bg-green-500 mt-1.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-foreground">
-                          <span className="font-semibold">{activity.user?.displayName ?? activity.user?.username}</span>
-                          {" "}
-                          <span className="text-muted-foreground">{activity.summary}</span>
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* Remove Friend Confirmation Dialog */}
+      <AlertDialog open={!!friendToRemove} onOpenChange={(open) => !open && setFriendToRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Friend?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove <span className="font-semibold">{friendToRemove?.name}</span> from your friends list?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => friendToRemove && removeFriendMutation.mutate(friendToRemove.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove Friend
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-    </div>
-
-    {/* Remove Friend Confirmation Dialog */}
-    <AlertDialog open={!!friendToRemove} onOpenChange={(open) => !open && setFriendToRemove(null)}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Remove Friend?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Are you sure you want to remove <span className="font-semibold">{friendToRemove?.name}</span> from your friends list?
-            This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => friendToRemove && removeFriendMutation.mutate(friendToRemove.id)}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            Remove Friend
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-
-    <RoomFAB />
+      <RoomFAB />
     </>
   );
 }
