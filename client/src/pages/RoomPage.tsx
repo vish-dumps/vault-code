@@ -45,6 +45,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 const LANGUAGE_OPTIONS = [
@@ -99,6 +106,7 @@ export default function RoomPage() {
   const [isEditingQuestion, setIsEditingQuestion] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("javascript");
   const [codePanelSize, setCodePanelSize] = useState(35);
+  const [showLoadingTimeout, setShowLoadingTimeout] = useState(false);
 
   const excalidrawRef = useRef<any>(null);
   const editorRef = useRef<any>(null);
@@ -120,6 +128,13 @@ export default function RoomPage() {
     emitCursorUpdate,
     emitQuestionUpdate,
     emitCodeCursorUpdate,
+    // Access control
+    accessDenied,
+    waitingForApproval,
+    wasDenied,
+    joinRequests,
+    askToJoin,
+    respondToJoinRequest,
   } = useLiveRoom(roomId);
 
   const endRoomMutation = useMutation({
@@ -162,23 +177,29 @@ export default function RoomPage() {
     }
   }, [roomState?.codeLanguage]);
 
+  useEffect(() => {
+    if (wasDenied) {
+      navigate("/");
+    }
+  }, [wasDenied, navigate]);
+
   // Apply remote canvas updates (ONLY elements, not appState)
   useEffect(() => {
     if (!roomState || !excalidrawRef.current) return;
-    
+
     const elements = roomState.canvasData?.elements || [];
     const serialized = JSON.stringify(elements);
-    
+
     // Skip if elements haven't changed
     if (serialized === lastElementsSnapshotRef.current) return;
-    
+
     // Mark that we're applying a remote update to prevent feedback loop
     isApplyingRemoteUpdateRef.current = true;
     lastElementsSnapshotRef.current = serialized;
-    
+
     // Update ONLY elements, preserve local appState (zoom, color, tool, etc.)
     excalidrawRef.current.updateScene({ elements });
-    
+
     // Reset flag after Excalidraw processes the update
     setTimeout(() => {
       isApplyingRemoteUpdateRef.current = false;
@@ -264,19 +285,19 @@ export default function RoomPage() {
   const handleExcalidrawChange = useCallback(
     (elements: any, appState: any) => {
       if (!isConnected || isApplyingRemoteUpdateRef.current) return;
-      
+
       const serialized = JSON.stringify(elements);
-      
+
       // Skip if elements haven't changed
       if (serialized === lastElementsSnapshotRef.current) return;
-      
+
       lastElementsSnapshotRef.current = serialized;
-      
+
       // Throttle emissions to max 60fps (16ms) for smooth performance
       if (emitThrottleTimerRef.current) {
         return; // Skip this update, previous one is still pending
       }
-      
+
       emitThrottleTimerRef.current = window.setTimeout(() => {
         // Only emit elements, NOT appState (keeps color, tool, zoom local)
         emitCanvasUpdate({ elements });
@@ -340,6 +361,18 @@ export default function RoomPage() {
     }
   }, [isCodeEditorOpen, emitCodeCursorUpdate]);
 
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    if (!isConnected || !roomState) {
+      timeout = setTimeout(() => {
+        setShowLoadingTimeout(true);
+      }, 10000);
+    } else {
+      setShowLoadingTimeout(false);
+    }
+    return () => clearTimeout(timeout);
+  }, [isConnected, roomState]);
+
   if (!roomId) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -365,12 +398,51 @@ export default function RoomPage() {
     );
   }
 
+  if (accessDenied) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Card className="p-6 text-center max-w-md w-full mx-4">
+          <div className="flex justify-center mb-4">
+            <div className="h-12 w-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
+              <Users className="h-6 w-6 text-yellow-500" />
+            </div>
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Waiting Room</h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            This room requires approval from the host to join.
+          </p>
+          {waitingForApproval ? (
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <p className="text-sm font-medium">Waiting for host approval...</p>
+            </div>
+          ) : (
+            <div className="flex gap-3 justify-center">
+              <Button variant="outline" onClick={() => navigate("/")}>
+                Cancel
+              </Button>
+              <Button onClick={askToJoin}>Ask to Join</Button>
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  }
+
   if (!isConnected || !roomState) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
           <p className="text-sm text-muted-foreground">Connecting to room...</p>
+          {showLoadingTimeout && (
+            <div className="mt-4">
+              <p className="text-xs text-destructive mb-2">Taking longer than expected...</p>
+              <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+                Reload Page
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -553,7 +625,7 @@ export default function RoomPage() {
                       x: cursor.pointer.x,
                       y: cursor.pointer.y,
                     }}
-                    transition={{ 
+                    transition={{
                       duration: 0.15,
                       ease: "linear"
                     }}
@@ -702,9 +774,9 @@ export default function RoomPage() {
                             key={member.socketId}
                             className="flex items-center gap-3 rounded-lg border bg-background p-3 hover:bg-muted/50 transition-colors"
                           >
-                            <div 
+                            <div
                               className="flex h-10 w-10 items-center justify-center rounded-full font-semibold text-sm"
-                              style={{ 
+                              style={{
                                 backgroundColor: `${colors.background}20`,
                                 color: colors.background,
                                 border: `2px solid ${colors.background}`
@@ -769,7 +841,49 @@ export default function RoomPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Join Requests Dialog */}
+      <Dialog open={joinRequests.length > 0} onOpenChange={() => { }}>
+        <DialogContent className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Join Requests</DialogTitle>
+            <DialogDescription>
+              The following users want to join this room.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {joinRequests.map((req) => (
+              <div key={req.socketId} className="flex items-center justify-between p-3 border rounded-lg bg-card">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
+                    {(req.username || "U")[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">{req.username}</p>
+                    <p className="text-xs text-muted-foreground">Requesting to join</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => respondToJoinRequest(req.socketId, false)}
+                  >
+                    Deny
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => respondToJoinRequest(req.socketId, true)}
+                  >
+                    Approve
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

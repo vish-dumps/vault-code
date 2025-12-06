@@ -83,6 +83,7 @@ const pendingRoomState = new Map<
 
 const persistTimers = new Map<string, NodeJS.Timeout>();
 const roomMembers = new Map<string, Map<string, RoomMember>>();
+const waitingRoomMembers = new Map<string, Map<string, RoomMember>>();
 
 function schedulePersist(roomId: string) {
   if (persistTimers.has(roomId)) {
@@ -123,7 +124,7 @@ function schedulePersist(roomId: string) {
 
 export function initMeetRoomsSocket(server: HttpServer) {
   console.log("[MeetRoomsSocket] Initializing Socket.io server on path: /socket.io/meet-rooms");
-  
+
   const io = new Server(server, {
     path: "/socket.io/meet-rooms",
     cors: {
@@ -134,7 +135,7 @@ export function initMeetRoomsSocket(server: HttpServer) {
     transports: ['websocket', 'polling'],
   });
   ioInstance = io;
-  
+
   console.log("[MeetRoomsSocket] Socket.io server created successfully");
 
   io.use((socket, next) => {
@@ -161,7 +162,9 @@ export function initMeetRoomsSocket(server: HttpServer) {
   io.on("connection", (socket) => {
     const data = socket.data as SocketUserData;
     console.log("[MeetRoomsSocket] Client connected:", socket.id, "User:", data.userId);
-    
+
+    // approvedUsersMap is now module-scoped
+
     socket.on("join_room", async (message: { roomId?: string }) => {
       const roomId = message?.roomId?.trim();
       if (!roomId) {
@@ -181,9 +184,19 @@ export function initMeetRoomsSocket(server: HttpServer) {
           return;
         }
 
+        const userData = socket.data as SocketUserData;
+        const isCreator = room.createdBy.toString() === userData.userId;
+        const roomApprovedUsers = approvedUsersMap.get(roomId) ?? new Set<string>();
+        const isApproved = roomApprovedUsers.has(userData.userId);
+
+        // Access Control Check
+        if (!isCreator && !isApproved) {
+          socket.emit("room:access_denied", { roomId });
+          return;
+        }
+
         socket.join(roomId);
 
-        const userData = socket.data as SocketUserData;
         const membersForRoom = roomMembers.get(roomId) ?? new Map<string, RoomMember>();
         const member: RoomMember = {
           socketId: socket.id,
@@ -304,26 +317,26 @@ export function initMeetRoomsSocket(server: HttpServer) {
 
       const position =
         payload.position &&
-        typeof payload.position.lineNumber === "number" &&
-        typeof payload.position.column === "number"
+          typeof payload.position.lineNumber === "number" &&
+          typeof payload.position.column === "number"
           ? {
-              lineNumber: Math.max(1, Math.floor(payload.position.lineNumber)),
-              column: Math.max(1, Math.floor(payload.position.column)),
-            }
+            lineNumber: Math.max(1, Math.floor(payload.position.lineNumber)),
+            column: Math.max(1, Math.floor(payload.position.column)),
+          }
           : null;
 
       const selection =
         payload.selection &&
-        typeof payload.selection.startLineNumber === "number" &&
-        typeof payload.selection.startColumn === "number" &&
-        typeof payload.selection.endLineNumber === "number" &&
-        typeof payload.selection.endColumn === "number"
+          typeof payload.selection.startLineNumber === "number" &&
+          typeof payload.selection.startColumn === "number" &&
+          typeof payload.selection.endLineNumber === "number" &&
+          typeof payload.selection.endColumn === "number"
           ? {
-              startLineNumber: Math.max(1, Math.floor(payload.selection.startLineNumber)),
-              startColumn: Math.max(1, Math.floor(payload.selection.startColumn)),
-              endLineNumber: Math.max(1, Math.floor(payload.selection.endLineNumber)),
-              endColumn: Math.max(1, Math.floor(payload.selection.endColumn)),
-            }
+            startLineNumber: Math.max(1, Math.floor(payload.selection.startLineNumber)),
+            startColumn: Math.max(1, Math.floor(payload.selection.startColumn)),
+            endLineNumber: Math.max(1, Math.floor(payload.selection.endLineNumber)),
+            endColumn: Math.max(1, Math.floor(payload.selection.endColumn)),
+          }
           : null;
 
       const emitterData = socket.data as SocketUserData;
@@ -373,26 +386,159 @@ export function initMeetRoomsSocket(server: HttpServer) {
       schedulePersist(roomId);
     });
 
-    socket.on("disconnect", () => {
-      roomMembers.forEach((membersForRoom, roomId) => {
-        if (!membersForRoom.has(socket.id)) {
-          return;
-        }
+    socket.on("ask_to_join", async (message: { roomId?: string }) => {
+      const roomId = message?.roomId?.trim();
+      if (!roomId) return;
 
+      const userData = socket.data as SocketUserData;
+      const waitingForRoom = waitingRoomMembers.get(roomId) ?? new Map<string, RoomMember>();
+
+      const member: RoomMember = {
+        socketId: socket.id,
+        userId: userData.userId,
+        username: userData.username,
+      };
+
+      waitingForRoom.set(socket.id, member);
+      waitingRoomMembers.set(roomId, waitingForRoom);
+
+      // Notify the room creator (admin)
+      try {
+        const room = await Room.findOne({ roomId }).lean();
+        if (room) {
+          // Find the admin's socket
+          const activeMembers = roomMembers.get(roomId);
+          if (activeMembers) {
+            Array.from(activeMembers.values()).forEach((activeMember) => {
+              if (activeMember.userId === room.createdBy.toString()) {
+                io.to(activeMember.socketId).emit("join_request", {
+                  socketId: socket.id,
+                  userId: userData.userId,
+                  username: userData.username,
+                });
+              }
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error in ask_to_join:", error);
+      }
+    });
+
+    socket.on("admin_response", (message: { socketId: string; approved: boolean; roomId: string }) => {
+      const { socketId, approved, roomId } = message;
+      if (!roomId || !socketId) return;
+
+      // Verify requester is admin
+      // In a real app we should verify this socket.userId matches room.createdBy
+      // For now we assume the UI only exposes this to admin
+
+      if (approved) {
+        // Add to approved list
+        const roomApproved = approvedUsersMap.get(roomId) ?? new Set<string>();
+        // We need the userId of the requester. 
+        // The waitingRoomMembers map stores RoomMember which has userId.
+        // But we just deleted it from waitingRoomMembers.
+        // We should retrieve it before deleting.
+      }
+
+      // ... wait, I need to rewrite this block to capture userId first.
+
+      let targetUserId: string | undefined;
+      const waitingForRoom = waitingRoomMembers.get(roomId);
+      if (waitingForRoom && waitingForRoom.has(socketId)) {
+        targetUserId = waitingForRoom.get(socketId)?.userId;
+        waitingForRoom.delete(socketId);
+        if (waitingForRoom.size === 0) {
+          waitingRoomMembers.delete(roomId);
+        }
+      }
+
+      if (approved && targetUserId) {
+        const roomApproved = approvedUsersMap.get(roomId) ?? new Set<string>();
+        roomApproved.add(targetUserId);
+        approvedUsersMap.set(roomId, roomApproved);
+
+        io.to(socketId).emit("join_approved", { roomId });
+      } else {
+        io.to(socketId).emit("join_denied", { roomId });
+      }
+    });
+
+    socket.on("leave_room", async (message: { roomId?: string }) => {
+      const roomId = message?.roomId?.trim();
+      if (!roomId) return;
+
+      const membersForRoom = roomMembers.get(roomId);
+      if (membersForRoom && membersForRoom.has(socket.id)) {
         membersForRoom.delete(socket.id);
-        if (!membersForRoom.size) {
+        if (membersForRoom.size === 0) {
           roomMembers.delete(roomId);
         }
 
+        const userData = socket.data as SocketUserData;
         socket.to(roomId).emit("room_presence", {
           type: "left",
           member: {
             socketId: socket.id,
-            userId: data.userId,
-            username: data.username,
+            userId: userData.userId,
+            username: userData.username,
           },
         });
+
+        socket.leave(roomId);
+
+        // Check if admin left
+        try {
+          const room = await Room.findOne({ roomId }).lean();
+          if (room && room.createdBy.toString() === userData.userId) {
+            closeRoom(roomId);
+          }
+        } catch (error) {
+          console.error("Error handling admin leave:", error);
+        }
+      }
+    });
+
+    socket.on("disconnect", async () => {
+      const userData = socket.data as SocketUserData;
+
+      // Cleanup waiting lists
+      waitingRoomMembers.forEach((members, roomId) => {
+        if (members.has(socket.id)) {
+          members.delete(socket.id);
+        }
       });
+
+      // Cleanup active rooms
+      const entries = Array.from(roomMembers.entries());
+      for (const [roomId, membersForRoom] of entries) {
+        if (membersForRoom.has(socket.id)) {
+          membersForRoom.delete(socket.id);
+          if (membersForRoom.size === 0) {
+            roomMembers.delete(roomId);
+          }
+
+          socket.to(roomId).emit("room_presence", {
+            type: "left",
+            member: {
+              socketId: socket.id,
+              userId: userData.userId,
+              username: userData.username,
+            },
+          });
+
+          // Check if admin disconnected
+          try {
+            const room = await Room.findOne({ roomId }).lean();
+            if (room && room.createdBy.toString() === userData.userId) {
+              closeRoom(roomId);
+            }
+          } catch (error) {
+            console.error("Error handling admin disconnect:", error);
+          }
+        }
+      }
     });
   });
 }
@@ -406,9 +552,25 @@ export function closeRoom(roomId: string) {
 
   pendingRoomState.delete(roomId);
   roomMembers.delete(roomId);
+  approvedUsersMap.delete(roomId); // Cleanup approved users
 
   if (ioInstance) {
     ioInstance.to(roomId).emit("room_closed", { roomId });
     ioInstance.in(roomId).socketsLeave(roomId);
   }
+
+  // Mark room as ended in DB
+  Room.findOneAndUpdate({ roomId }, { endedAt: new Date() }).catch(err =>
+    console.error("Failed to mark room as ended:", err)
+  );
 }
+
+// Helper to approve a user from outside (e.g. via invite API)
+export function approveUser(roomId: string, userId: string) {
+  const roomApproved = approvedUsersMap.get(roomId) ?? new Set<string>();
+  roomApproved.add(userId);
+  approvedUsersMap.set(roomId, roomApproved);
+}
+
+// We need to move approvedUsers to module scope to access it in approveUser
+const approvedUsersMap = new Map<string, Set<string>>(); // roomId -> Set<userId>

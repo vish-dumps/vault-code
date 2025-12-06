@@ -35,7 +35,9 @@ import {
 } from "@shared/gamification";
 import cron from "node-cron";
 import { notifyUser } from "./services/realtime";
-import { closeRoom } from "./services/meetRoomsSocket";
+import { closeRoom, approveUser } from "./services/meetRoomsSocket";
+
+
 import { computeWeeklyLeaderboard } from "./services/leaderboard";
 import { createAnswerRouter } from "./controllers/answers";
 import { createSocialRouter } from "./controllers/social";
@@ -65,37 +67,37 @@ let contestsCacheTimestamp = 0;
 const FALLBACK_CONTESTS: ContestResponse[] = [
   {
     id: "fallback-1",
-    name: "Codeforces Round #912 (Div. 2)",
+    name: "Codeforces Round #990 (Div. 2)",
     platform: "Codeforces",
-    startTime: "Oct 25, 2025 at 8:35 PM",
+    startTime: "Dec 10, 2025 at 8:35 PM",
     url: "https://codeforces.com",
   },
   {
     id: "fallback-2",
-    name: "Weekly Contest 419",
+    name: "Weekly Contest 430",
     platform: "LeetCode",
-    startTime: "Oct 27, 2025 at 10:00 AM",
+    startTime: "Dec 14, 2025 at 10:00 AM",
     url: "https://leetcode.com",
   },
   {
     id: "fallback-3",
-    name: "CodeChef Starters 110",
+    name: "CodeChef Starters 160",
     platform: "CodeChef",
-    startTime: "Oct 28, 2025 at 8:00 PM",
+    startTime: "Dec 17, 2025 at 8:00 PM",
     url: "https://codechef.com",
   },
   {
     id: "fallback-4",
-    name: "AtCoder Beginner Contest 325",
+    name: "AtCoder Beginner Contest 380",
     platform: "AtCoder",
-    startTime: "Oct 29, 2025 at 9:00 AM",
+    startTime: "Dec 20, 2025 at 9:00 AM",
     url: "https://atcoder.jp",
   },
   {
     id: "fallback-5",
-    name: "Codeforces Round #913 (Div. 1)",
+    name: "Codeforces Round #992 (Div. 1)",
     platform: "Codeforces",
-    startTime: "Oct 30, 2025 at 7:00 PM",
+    startTime: "Dec 25, 2025 at 7:00 PM",
     url: "https://codeforces.com",
   },
 ];
@@ -2496,6 +2498,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           await notification.save();
 
+          // Auto-approve the invited user for this room
+          approveUser(roomId, friendId);
+
           // Send real-time notification
           notifyUser(friendId, "notifications:new", {
             id: notification._id.toString(),
@@ -2559,6 +2564,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   computeWeeklyLeaderboard().catch((error) => {
     console.error("Initial leaderboard computation failed:", error);
+  });
+
+  // Fetch external stats (LeetCode/Codeforces)
+  // Activity Heatmap Route
+  app.get("/api/user/activity-heatmap", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      oneYearAgo.setHours(0, 0, 0, 0);
+
+      // Aggregate simplified solved questions by date
+      const activity = await Question.aggregate([
+        {
+          $match: {
+            userId: new Types.ObjectId(userId),
+            solvedAt: { $gte: oneYearAgo }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$solvedAt" }
+            },
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            date: "$_id",
+            count: 1
+          }
+        }
+      ]);
+
+      res.json(activity);
+    } catch (error) {
+      console.error("Error fetching activity heatmap:", error);
+      res.status(500).json({ error: "Failed to fetch activity heatmap" });
+    }
+  });
+
+  app.get("/api/user/stats/external", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await mongoStorage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const stats = {
+        leetcode: null as any,
+        codeforces: null as any,
+      };
+
+      if (user.leetcodeUsername) {
+        try {
+          const response = await fetch("https://leetcode.com/graphql", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+              "Referer": "https://leetcode.com/u/" + user.leetcodeUsername,
+              "Origin": "https://leetcode.com"
+            },
+            body: JSON.stringify({
+              query: `
+                query userStats($username: String!) {
+                  matchedUser(username: $username) {
+                    submitStats {
+                      acSubmissionNum { difficulty count }
+                    }
+                  }
+                  userContestRanking(username: $username) {
+                    rating
+                    globalRanking
+                  }
+                }
+              `,
+              variables: { username: user.leetcodeUsername },
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`LeetCode API error: ${response.status}`);
+          }
+
+          const contentType = response.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) {
+            throw new Error("Received non-JSON response from LeetCode");
+          }
+
+          const data = await response.json();
+          if (data.data) {
+            stats.leetcode = {
+              solved: data.data.matchedUser?.submitStats?.acSubmissionNum || [],
+              contest: data.data.userContestRanking || null,
+            };
+          }
+        } catch (e) {
+          console.error("LeetCode fetch error:", e);
+        }
+      }
+
+      if (user.codeforcesUsername) {
+        try {
+          const response = await fetch(
+            `https://codeforces.com/api/user.info?handles=${user.codeforcesUsername}`
+          );
+          const data = await response.json();
+          if (data.status === "OK" && data.result?.length > 0) {
+            stats.codeforces = {
+              rating: data.result[0].rating,
+              rank: data.result[0].rank,
+              maxRating: data.result[0].maxRating,
+            };
+          }
+        } catch (e) {
+          console.error("Codeforces fetch error:", e);
+        }
+      }
+
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching external stats:", error);
+      res.status(500).json({ error: "Failed to fetch stats" });
+    }
   });
 
   return httpServer;

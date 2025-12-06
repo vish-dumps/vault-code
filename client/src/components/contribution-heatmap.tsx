@@ -1,21 +1,39 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Card } from "@/components/ui/card";
+import { Info, ChevronDown } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface ContributionHeatmapProps {
   data?: Array<{ date: string; count: number }>;
 }
 
-interface HeatmapDay {
-  date: Date;
-  count: number;
-}
-
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const CELL_SIZE = 12;
-const CELL_GAP = 2;
-const LABEL_WIDTH = 32;
-const MONTH_LABEL_HEIGHT = 16;
+
+// Configuration from example (Adapted for Shadcn Theme)
+const THEME = {
+  // Use semantic classes instead of hardcoded hex
+  bg: 'bg-card',
+  textMain: 'text-card-foreground',
+  textMuted: 'text-muted-foreground',
+  border: 'border-border',
+  cellEmpty: 'bg-muted/40',
+  // Standard Emerald Scale for better Light/Dark compatibility
+  colors: [
+    'bg-muted/40',      // Level 0 (Empty)
+    'bg-emerald-200 dark:bg-emerald-900/40', // Level 1
+    'bg-emerald-300 dark:bg-emerald-700/60', // Level 2
+    'bg-emerald-400 dark:bg-emerald-600',    // Level 3
+    'bg-emerald-500 dark:bg-emerald-500',    // Level 4
+  ]
+};
+
+const getContributionLevel = (count: number) => {
+  if (count === 0) return 0;
+  if (count <= 2) return 1;
+  if (count <= 5) return 2;
+  if (count <= 9) return 3;
+  return 4;
+};
 
 const normalizeDate = (value: string | Date): string => {
   const date = value instanceof Date ? value : new Date(value);
@@ -25,210 +43,190 @@ const normalizeDate = (value: string | Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-const formatTooltip = (date: Date, count: number) => {
-  const base = date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-  return `${base}: ${Math.max(count, 0)} problem${Math.max(count, 0) === 1 ? "" : "s"}`;
-};
-
 export function ContributionHeatmap({ data = [] }: ContributionHeatmapProps) {
-  const { weeks, totalContributions, hasActivity, monthPositions } = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
-    const contributions = new Map<string, number>();
-    data.forEach(({ date, count }) => {
-      const key = normalizeDate(date);
-      contributions.set(key, (contributions.get(key) || 0) + count);
+
+  // Transform prop data to map for easy lookup
+  const contributionsMap = useMemo(() => {
+    const map = new Map<string, number>();
+    data.forEach(item => {
+      map.set(normalizeDate(item.date), item.count);
     });
-
-    const totalWeeks = 53;
-    const startDate = new Date(today);
-    startDate.setDate(startDate.getDate() - totalWeeks * 7);
-    startDate.setHours(0, 0, 0, 0);
-
-    const startOffset = startDate.getDay();
-    startDate.setDate(startDate.getDate() - startOffset);
-
-    const generatedWeeks: HeatmapDay[][] = [];
-    const monthLabels: Array<{ label: string; weekIndex: number }> = [];
-    let runningDate = new Date(startDate);
-    let contributionsSum = 0;
-    let hasNonZeroActivity = false;
-
-    for (let week = 0; week < totalWeeks; week++) {
-      const weekData: HeatmapDay[] = [];
-
-      for (let day = 0; day < 7; day++) {
-        const current = new Date(runningDate);
-        const key = normalizeDate(current);
-        const isFuture = current > today;
-        const count = isFuture ? -1 : contributions.get(key) ?? 0;
-
-        if (!isFuture) {
-          contributionsSum += Math.max(count, 0);
-          if (count > 0) {
-            hasNonZeroActivity = true;
-          }
-        }
-
-        weekData.push({ date: current, count });
-        runningDate.setDate(runningDate.getDate() + 1);
-      }
-
-      const firstDay = weekData[0]?.date;
-      if (firstDay && firstDay.getDate() <= 7) {
-        monthLabels.push({
-          label: MONTH_LABELS[firstDay.getMonth()],
-          weekIndex: week,
-        });
-      }
-
-      generatedWeeks.push(weekData);
-      if (runningDate > today && runningDate.getDay() === 0) {
-        break;
-      }
-    }
-
-    return {
-      weeks: generatedWeeks,
-      totalContributions: contributionsSum,
-      hasActivity: hasNonZeroActivity,
-      monthPositions: monthLabels,
-    };
+    return map;
   }, [data]);
 
-  const heatmapWidth = weeks.length * (CELL_SIZE + CELL_GAP) - CELL_GAP + LABEL_WIDTH;
-  const heatmapHeight = 7 * (CELL_SIZE + CELL_GAP) - CELL_GAP + MONTH_LABEL_HEIGHT;
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
+  // Generate calendar dates (last 365 days)
+  const { calendarDates, weeks } = useMemo(() => {
+    const dates: Date[] = [];
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - 365);
 
-  useEffect(() => {
-    const updateScale = () => {
-      if (!containerRef.current) return;
-      const availableWidth = containerRef.current.clientWidth;
-      if (!availableWidth) return;
-      const requiredWidth = heatmapWidth;
-      const nextScale = requiredWidth > availableWidth ? availableWidth / requiredWidth : 1;
-      setScale(Math.max(Math.min(nextScale, 1), 0.5));
-    };
+    // Normalize to Sunday start
+    const dayOfWeek = startDate.getDay();
+    startDate.setDate(startDate.getDate() - dayOfWeek);
 
-    updateScale();
-    window.addEventListener("resize", updateScale);
-    return () => window.removeEventListener("resize", updateScale);
-  }, [heatmapWidth]);
+    for (let i = 0; i <= 371; i++) {
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() + i);
+      if (date > today) break;
+      dates.push(date);
+    }
 
-  const getColor = (count: number) => {
-    if (count === -1) return "bg-transparent border border-dashed border-border/40";
-    if (count === 0) return "bg-slate-300/60 dark:bg-slate-700/60";
-    if (count === 1) return "bg-emerald-200 dark:bg-emerald-900/60";
-    if (count === 2) return "bg-emerald-300 dark:bg-emerald-800/70";
-    if (count === 3) return "bg-emerald-400 dark:bg-emerald-700/80";
-    return "bg-emerald-500 dark:bg-emerald-600";
-  };
+    const weeksArr: Date[][] = [];
+    let currentWeek: Date[] = [];
+
+    dates.forEach((date) => {
+      currentWeek.push(date);
+      if (currentWeek.length === 7) {
+        weeksArr.push(currentWeek);
+        currentWeek = [];
+      }
+    });
+    if (currentWeek.length > 0) weeksArr.push(currentWeek);
+
+    return { calendarDates: dates, weeks: weeksArr };
+  }, []);
+
+  // Stats Calculation
+  const totalSubmissions = useMemo(() => {
+    return data.reduce((acc, curr) => acc + curr.count, 0);
+  }, [data]);
+
+  const activeDays = useMemo(() => {
+    return data.filter(d => d.count > 0).length;
+  }, [data]);
+
+  const maxStreak = useMemo(() => {
+    let max = 0;
+    let current = 0;
+
+    // Sort data by date just in case
+    const sortedData = [...data]
+      .filter(d => d.count > 0)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    if (sortedData.length === 0) return 0;
+
+    let prevDate = new Date(sortedData[0].date);
+    // Initialize streak with 1 as we have at least one active day
+    current = 1;
+    max = 1;
+
+    for (let i = 1; i < sortedData.length; i++) {
+      const currentDate = new Date(sortedData[i].date);
+      const diffTime = Math.abs(currentDate.getTime() - prevDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays === 1) {
+        current += 1;
+      } else if (diffDays > 1) {
+        current = 1;
+      }
+
+      if (current > max) max = current;
+      prevDate = currentDate;
+    }
+
+    return max;
+  }, [data]);
+
+
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-emerald-500" />
-          Activity Heatmap
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          {totalContributions} contributions in the last year
-        </p>
-      </CardHeader>
-      <CardContent>
-        {weeks.length === 0 ? (
-          <div className="text-center text-sm text-muted-foreground py-6">
-            No activity data available yet.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div
-              ref={containerRef}
-              className="relative max-w-full min-w-0 overflow-hidden rounded-2xl border border-border/40 bg-muted/10 p-4"
-            >
-              <div
-                style={{ height: heatmapHeight * scale, width: heatmapWidth * scale }}
-                className="relative"
-              >
-                <div
-                  style={{
-                    transform: `scale(${scale})`,
-                    transformOrigin: "top left",
-                    width: heatmapWidth,
-                  }}
-                  className="flex flex-col gap-2"
-                >
-                  <div
-                    className="flex gap-[2px]"
-                    style={{ paddingLeft: LABEL_WIDTH }}
-                  >
-                    {monthPositions.map(({ label, weekIndex }) => (
-                      <div
-                        key={`${label}-${weekIndex}`}
-                        className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground"
-                        style={{ marginLeft: weekIndex === 0 ? 0 : weekIndex * (CELL_SIZE + CELL_GAP) }}
-                      >
-                        {label}
-                      </div>
-                    ))}
-                  </div>
+    <div className={cn("w-full rounded-md border p-4 shadow-sm font-sans", THEME.bg, THEME.border)}>
 
-                  <div className="flex gap-[2px]">
-                    <div
-                      className="flex flex-col justify-between pr-2 text-[10px] text-muted-foreground"
-                      style={{ width: LABEL_WIDTH }}
-                    >
-                      <span>Mon</span>
-                      <span>Wed</span>
-                      <span>Fri</span>
-                    </div>
-                    <div className="flex gap-[2px]">
-                      {weeks.map((week, weekIndex) => (
-                        <div key={weekIndex} className="flex flex-col gap-[2px]">
-                          {week.map((day, dayIndex) => (
-                            <div
-                              key={`${weekIndex}-${dayIndex}`}
-                              style={{ width: CELL_SIZE, height: CELL_SIZE }}
-                              className={`rounded-[3px] transition-all duration-150 ${getColor(day.count)} ${
-                                day.count > 0 ? "shadow-sm" : ""
-                              } ${day.count >= 0 ? "hover:scale-105 cursor-pointer" : "cursor-default opacity-40"}`}
-                              title={day.count >= 0 ? formatTooltip(day.date, day.count) : undefined}
-                            />
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
+        <div className="flex items-center gap-2">
+          <span className={cn("text-lg font-medium", THEME.textMain)}>
+            {totalSubmissions} submissions
+          </span>
+          <span className={cn("text-sm", THEME.textMuted)}>in the past one year</span>
+          <Info size={14} className={THEME.textMuted} />
+        </div>
+
+        <div className="flex items-center gap-6 text-xs">
+          <div className={THEME.textMuted}>
+            Total active days: <span className={THEME.textMain}>{activeDays}</span>
+          </div>
+          <div className={THEME.textMuted}>
+            Max streak: <span className={THEME.textMain}>{maxStreak}</span>
+          </div>
+
+          {/* Year Dropdown */}
+          <button className={cn("flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+            "bg-muted/50 border text-muted-foreground hover:border-foreground/20 hover:text-foreground", THEME.border)}>
+            Current <ChevronDown size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Heatmap Grid Wrapper */}
+      <div className="overflow-x-auto pb-2">
+        <div className="flex gap-1 min-w-max">
+
+          {/* Day Labels (Mon, Wed, Fri) */}
+          <div className="flex flex-col gap-1 pt-6 pr-2">
+            {/* Spacer for month labels row */}
+            <div className="h-0" />
+            {/* 7 rows, specific labels only */}
+            {[0, 1, 2, 3, 4, 5, 6].map(dayIndex => (
+              <div key={dayIndex} className="h-[10px] text-[9px] leading-[10px] text-muted-foreground relative">
+                {dayIndex === 1 && 'Mon'}
+                {dayIndex === 3 && 'Wed'}
+                {dayIndex === 5 && 'Fri'}
+              </div>
+            ))}
+          </div>
+
+          {/* The Grid Columns (Weeks) */}
+          {weeks.map((week, weekIndex) => {
+            // Determine if we should show a month label above this week
+            const firstDay = week[0];
+            const isNewMonth = firstDay.getDate() <= 7;
+            const monthLabel = isNewMonth ? MONTH_LABELS[firstDay.getMonth()] : null;
+
+            return (
+              <div key={weekIndex} className="flex flex-col gap-1">
+                {/* Month Label Row */}
+                <div className="h-[14px] text-[9px] text-muted-foreground mb-1">
+                  {monthLabel}
                 </div>
-              </div>
-            </div>
 
-            {!hasActivity && (
-              <div className="text-xs text-muted-foreground">
-                No recorded problem activity yet. Add questions to start building your streak.
-              </div>
-            )}
+                {/* Days in this week */}
+                {week.map((date) => {
+                  const dateKey = normalizeDate(date);
+                  const count = contributionsMap.get(dateKey) || 0;
+                  const level = getContributionLevel(count);
 
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Less</span>
-              <div className="flex gap-1">
-                <div className="w-3 h-3 rounded-sm bg-slate-300/60 dark:bg-slate-700/60" />
-                <div className="w-3 h-3 rounded-sm bg-emerald-200 dark:bg-emerald-900/60" />
-                <div className="w-3 h-3 rounded-sm bg-emerald-300 dark:bg-emerald-800/70" />
-                <div className="w-3 h-3 rounded-sm bg-emerald-400 dark:bg-emerald-700/80" />
-                <div className="w-3 h-3 rounded-sm bg-emerald-500 dark:bg-emerald-600" />
+                  return (
+                    <div
+                      key={dateKey}
+                      title={`${count} submissions on ${date.toDateString()}`}
+                      className={cn(
+                        "w-[10px] h-[10px] rounded-[2px] cursor-pointer transition-colors duration-200 border border-border/10 hover:ring-1 hover:ring-foreground/40 hover:z-10",
+                        THEME.colors[level]
+                      )}
+                    />
+                  );
+                })}
               </div>
-              <span>More</span>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Footer / Legend */}
+      <div className="mt-4 flex items-center justify-end text-xs text-muted-foreground">
+        <div className="flex items-center gap-1">
+          <span>Less</span>
+          {THEME.colors.map((color, i) => (
+            <div key={i} className={cn("w-[10px] h-[10px] rounded-[2px] border border-border/10", color)} />
+          ))}
+          <span>More</span>
+        </div>
+      </div>
+    </div>
   );
 }
