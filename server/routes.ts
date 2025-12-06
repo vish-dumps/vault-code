@@ -812,6 +812,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Rewards routes
+  app.post("/api/user/rewards/:instanceId/use", async (req: AuthRequest, res) => {
+    try {
+      const userId = getUserId(req);
+      const instanceId = req.params.instanceId;
+
+      const user = await mongoStorage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const result = await activateReward(user, instanceId);
+
+      // Persist the changes
+      await mongoStorage.updateUser(userId, {
+        rewardsInventory: result.user.rewardsInventory,
+        markAllRewardsSeen: true,
+      });
+
+      // Maintain internal consistency if needed (e.g. apply XP side effects)
+      if (result.instantXp > 0) {
+        await applyXp(userId, result.instantXp, {}, result.user);
+      }
+
+      // If effect was added (e.g., streak freeze active), persist it
+      if (result.activatedEffect) {
+        const currentEffects = user.rewardEffects || [];
+        const existingIndex = currentEffects.findIndex(e => e.instanceId === instanceId && e.type === result.activatedEffect!.type);
+
+        let newEffects = [...currentEffects];
+        if (existingIndex > -1) {
+          newEffects[existingIndex] = result.activatedEffect;
+        } else {
+          newEffects.push(result.activatedEffect);
+        }
+
+        await mongoStorage.updateUser(userId, { rewardEffects: newEffects });
+      }
+
+      res.json({
+        success: true,
+        reward: result.reward,
+        instantXp: result.instantXp,
+        activatedEffect: result.activatedEffect
+      });
+    } catch (error) {
+      console.error("Reward activation error:", error);
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to activate reward" });
+    }
+  });
+
   app.get("/api/user/solved", async (req: AuthRequest, res) => {
     try {
       const userId = getUserId(req);

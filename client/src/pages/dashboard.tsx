@@ -298,6 +298,7 @@ export default function Dashboard() {
       hasShownStreakWarningRef.current = true;
     }
     if (!isLateWarning) {
+      setShowStreakWarning(false);
       hasShownStreakWarningRef.current = false;
     }
   }, [isLateWarning]);
@@ -374,7 +375,7 @@ export default function Dashboard() {
       >
         <div className="text-sm font-medium text-muted-foreground mb-1">Welcome Back,</div>
         <h1 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-none mb-2">
-          <span className="bg-gradient-to-r from-[#d397fa] via-[#a78bfa] to-[#8364e8] bg-clip-text text-transparent animate-gradient">
+          <span className="bg-gradient-to-r from-[#ff7b00] to-[#ef233c] dark:from-[#d397fa] dark:via-[#a78bfa] dark:to-[#8364e8] bg-clip-text text-transparent animate-gradient">
             {formattedName}
           </span>
         </h1>

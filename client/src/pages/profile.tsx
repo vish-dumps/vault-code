@@ -128,13 +128,13 @@ export default function Profile() {
       setUsernameValue(userProfile.username || "");
       const storedProfileImage = userProfile.profileImage || "";
       setProfileImage(storedProfileImage);
-      
+
       // Initialize avatar state from database
       setAvatarType(userProfile.avatarType || 'initials');
       setAvatarGender(userProfile.avatarGender || 'male');
       setCustomAvatarUrl(userProfile.customAvatarUrl || "");
       setRandomAvatarSeed(userProfile.randomAvatarSeed ?? Date.now());
-      
+
       setIsInitialized(true);
     }
   }, [userProfile, isInitialized]);
@@ -187,7 +187,11 @@ export default function Profile() {
     if (Number.isNaN(date.getTime())) {
       return "";
     }
-    return date.toISOString().split("T")[0];
+    // Use local date YYYY-MM-DD to match the chart iteration
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
 
   const createImage = (url: string) =>
@@ -214,7 +218,7 @@ export default function Profile() {
       const MAX_SIZE = 400;
       const size = Math.min(cropArea.width, cropArea.height);
       const finalSize = Math.min(size, MAX_SIZE);
-      
+
       canvas.width = finalSize;
       canvas.height = finalSize;
 
@@ -236,7 +240,7 @@ export default function Profile() {
       // Try multiple quality levels to ensure file size is reasonable
       let quality = 0.85;
       let dataUrl = canvas.toDataURL("image/jpeg", quality);
-      
+
       // If still too large (> 500KB in base64), reduce quality further
       while (dataUrl.length > 700000 && quality > 0.5) {
         quality -= 0.1;
@@ -258,7 +262,7 @@ export default function Profile() {
 
   const handleProfileImageUpload = (file: File) => {
     console.log('File selected:', file.name, 'Size:', file.size, 'Type:', file.type);
-    
+
     if (file.size > MAX_PROFILE_IMAGE_SIZE) {
       toast({
         title: "Image too large",
@@ -517,23 +521,23 @@ export default function Profile() {
       const createdKey = normalizeDateKey(todo.createdAt);
       if (!createdKey) return;
 
-    const createdEntry = stats.get(createdKey) ?? { added: 0, completed: 0 };
-    createdEntry.added += 1;
+      const createdEntry = stats.get(createdKey) ?? { added: 0, completed: 0 };
+      createdEntry.added += 1;
 
-    if (todo.completed) {
-      const completionKey = normalizeDateKey(todo.completedAt || todo.createdAt);
-      if (completionKey) {
-        if (completionKey === createdKey) {
-          createdEntry.completed += 1;
+      if (todo.completed) {
+        const completionKey = normalizeDateKey(todo.completedAt || todo.createdAt);
+        if (completionKey) {
+          if (completionKey === createdKey) {
+            createdEntry.completed += 1;
+          } else {
+            const completionEntry = stats.get(completionKey) ?? { added: 0, completed: 0 };
+            completionEntry.completed += 1;
+            stats.set(completionKey, completionEntry);
+          }
         } else {
-          const completionEntry = stats.get(completionKey) ?? { added: 0, completed: 0 };
-          completionEntry.completed += 1;
-          stats.set(completionKey, completionEntry);
+          createdEntry.completed += 1;
         }
-      } else {
-        createdEntry.completed += 1;
       }
-    }
 
       stats.set(createdKey, createdEntry);
     });
@@ -862,13 +866,13 @@ export default function Profile() {
                   <Badge variant="secondary">{userProfile?.streak || 0} {userProfile?.streak === 1 ? 'day' : 'days'}</Badge>
                 </div>
               </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="card-connected-accounts">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <LinkIcon className="h-5 w-5" />
-              Connected Accounts
+            </CardContent>
+          </Card>
+          <Card data-testid="card-connected-accounts">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <LinkIcon className="h-5 w-5" />
+                Connected Accounts
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
