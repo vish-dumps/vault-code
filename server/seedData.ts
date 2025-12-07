@@ -12,14 +12,30 @@ export async function seedDummyData() {
   }
 
   // Create a default user
-  const user = await mongoStorage.createUser({
-    username: 'demo-user',
-    email: 'demo@example.com',
-    password: 'CodeVault2024!', // This will be hashed by the User model
-    name: 'Demo User',
-    leetcodeUsername: 'demo_leetcode',
-    codeforcesUsername: 'demo_codeforces',
-  });
+  let user;
+  try {
+    user = await mongoStorage.createUser({
+      username: 'demo-user',
+      email: 'demo@example.com',
+      password: 'CodeVault2024!', // This will be hashed by the User model
+      name: 'Demo User',
+      leetcodeUsername: 'demo_leetcode',
+      codeforcesUsername: 'demo_codeforces',
+    });
+  } catch (error: any) {
+    if (error.code === 11000 || error.message.includes('E11000')) {
+      console.log('✅ Demo user already exists (caught E11000), skipping creation');
+      const existing = await mongoStorage.getUserByUsername('demo-user');
+      if (existing) {
+        user = existing;
+      } else {
+        console.error('❌ Error: Could not find existing user after duplicate key error');
+        return;
+      }
+    } else {
+      throw error;
+    }
+  }
 
   console.log('✅ Created user:', user.username);
 

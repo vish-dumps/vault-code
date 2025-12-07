@@ -32,8 +32,8 @@ This guide outlines the steps to deploy your full-stack application. We will dep
 5.  **Deploy**: Click **Create Web Service**.
 
 > [!NOTE]
-> **Why Root Deployment?**
-> We deploy from the root because your project uses shared code in a `shared` folder. Building from the root ensures all modules are resolved correctly. The build command will build both the frontend and backend, but using `esbuild` for the server ensures a fast, bundled output.
+> **Graceful Seeding**
+> I have updated the seeding script to gracefully handle existing data. It will now log `✅ Demo user already exists (caught E11000), skipping creation` instead of crashing your deployment if the user is already there.
 
 ---
 
