@@ -21,15 +21,15 @@ if (smtpUser && smtpPass) {
   try {
     const transportOptions = smtpService
       ? {
-          service: smtpService,
-          auth: { user: smtpUser, pass: smtpPass },
-        }
+        service: smtpService,
+        auth: { user: smtpUser, pass: smtpPass },
+      }
       : {
-          host: smtpHost,
-          port: smtpPort,
-          secure: smtpSecure,
-          auth: { user: smtpUser, pass: smtpPass },
-        };
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpSecure,
+        auth: { user: smtpUser, pass: smtpPass },
+      };
 
     smtpTransporter = nodemailer.createTransport(transportOptions);
     smtpTransporter.verify().catch((error: unknown) => {
@@ -69,12 +69,12 @@ interface SendOtpOptions {
 
 export async function sendOtpEmail({ to, code, expiresAt }: SendOtpOptions): Promise<boolean> {
   console.log(`[Email] sendOtpEmail called with to="${to}", code="${code}"`);
-  
+
   if (!to || typeof to !== 'string' || to.trim().length === 0) {
     console.error(`[Email] ❌ Invalid email address provided: "${to}"`);
     return false;
   }
-  
+
   const expiresInMinutes = Math.ceil(
     Math.max(0, expiresAt.getTime() - Date.now()) / (60 * 1000)
   );
@@ -114,16 +114,22 @@ export async function sendOtpEmail({ to, code, expiresAt }: SendOtpOptions): Pro
   if (resendClient) {
     console.log(`[Email] Using Resend client to send to: ${to}`);
     try {
-      await resendClient.emails.send({
+      const response = await resendClient.emails.send({
         from: resendFrom,
         to,
         subject,
         html,
       });
+
+      if (response && typeof response === 'object' && 'error' in response && response.error) {
+        console.error("[Email] ❌ Resend API returned error:", response.error);
+        return false;
+      }
+
       console.log(`[Email] ✅ Resend email sent successfully to: ${to}`);
       return true;
     } catch (error: unknown) {
-      console.error("[Email] ❌ Failed to send OTP email via Resend:", error);
+      console.error("[Email] ❌ Failed to send OTP email via Resend (exception):", error);
     }
   } else {
     console.log("[Email] ⚠️ Resend client not available");

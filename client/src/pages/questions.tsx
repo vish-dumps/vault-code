@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { QuestionCard } from "@/components/question-card";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCachedFetch } from "@/hooks/useCachedFetch";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,10 +27,10 @@ export default function Questions() {
   const [difficultyFilter, setDifficultyFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("");
 
-  const { data: questions = [], isLoading } = useQuery<QuestionWithDetails[]>({
-    queryKey: ["/api/questions"],
-    refetchInterval: 30000,
+  const { data, isLoading, refetch } = useCachedFetch<QuestionWithDetails[]>("/api/questions", {
+    cacheKey: "questions_list"
   });
+  const questions = data || [];
 
   const toTimestamp = (value: QuestionWithDetails["dateSaved"]) => {
     if (!value) return 0;
@@ -88,8 +89,8 @@ export default function Questions() {
             Your saved coding problems
           </p>
         </div>
-        <Button 
-          onClick={() => setLocation("/questions/add")} 
+        <Button
+          onClick={() => setLocation("/questions/add")}
           data-testid="button-add-question"
         >
           <Plus className="h-4 w-4 mr-2" />

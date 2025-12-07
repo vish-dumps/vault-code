@@ -29,6 +29,16 @@ This guide outlines the steps to deploy your full-stack application. We will dep
     *   `DATABASE_URL`: Your valid MongoDB connection string.
     *   `SESSION_SECRET`: A long random string.
     *   `NODE_ENV`: `production`
+    *   **Email Configuration** (Recommended - Resend):
+        *   `RESEND_API_KEY`: `re_123456...`
+        *   `RESEND_FROM`: `onboarding@resend.dev` (IMPORTANT: Use this exactly if you don't have a verified domain)
+    *   **SMTP Configuration** (Alternative):
+        *   `SMTP_HOST`: `smtp.gmail.com`
+        *   `SMTP_PORT`: `587`
+        *   `SMTP_SECURE`: `false`
+        *   `SMTP_USER`: Your email address.
+        *   `SMTP_PASS`: Your email **App Password**.
+
 5.  **Deploy**: Click **Create Web Service**.
 
 > [!NOTE]
@@ -57,5 +67,5 @@ This guide outlines the steps to deploy your full-stack application. We will dep
 ## Troubleshooting
 
 -   **White Screen on Vercel**: Check the "Output Directory" setting. It MUST be `dist/public`.
+-   **Email Failures (Resend)**: If you use the free tier, you MUST set `RESEND_FROM` to `onboarding@resend.dev` and only send emails to yourself.
 -   **API Errors**: Check the `vercel.json` destination URL.
--   **Build Failures**: Ensure you have pushed the latest `package.json` updates which consolidate all dependencies in the root.

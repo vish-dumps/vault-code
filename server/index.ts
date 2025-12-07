@@ -8,7 +8,28 @@ import authRoutes from "./auth-routes";
 import { initRealtime } from "./services/realtime";
 import { initMeetRoomsSocket } from "./services/meetRoomsSocket";
 
+// Optimization: Compression
+import compression from "compression";
+
 const app = express();
+
+// Optimization: Compression
+app.use(compression());
+
+// Optimization: Request Timing
+app.use((req, res, next) => {
+  const start = Date.now();
+  console.time(`${req.method} ${req.path}`);
+  res.on('finish', () => {
+    console.timeEnd(`${req.method} ${req.path}`);
+  });
+  next();
+});
+
+// Optimization: Health Check
+app.get('/ping', (_req, res) => {
+  res.status(200).send('pong');
+});
 
 declare module 'http' {
   interface IncomingMessage {
@@ -29,7 +50,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
+
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
   } else {
@@ -73,10 +94,10 @@ app.use((req, res, next) => {
 (async () => {
   // Connect to MongoDB
   await connectToMongoDB();
-  
+
   // Seed dummy data on startup (only if no users exist)
   await seedDummyData();
-  
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

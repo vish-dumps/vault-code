@@ -136,7 +136,35 @@ export default function Dashboard() {
       const response = await apiRequest("PATCH", `/api/todos/${id}`, { completed });
       return response.json();
     },
+    onMutate: async ({ id, completed }) => {
+      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+      await queryClient.cancelQueries({ queryKey: ["/api/todos"] });
+
+      // Snapshot the previous value
+      const previousTodos = queryClient.getQueryData<Todo[]>(["/api/todos"]);
+
+      // Optimistically update to the new value
+      queryClient.setQueryData<Todo[]>(["/api/todos"], (old) => {
+        return old?.map((t) => (t.id === id ? { ...t, completed } : t)) || [];
+      });
+
+      // Return a context object with the snapshotted value
+      return { previousTodos };
+    },
+    onError: (_err, _newTodo, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousTodos) {
+        queryClient.setQueryData<Todo[]>(["/api/todos"], context.previousTodos);
+      }
+      toast({
+        title: "Update failed",
+        description: "Could not update todo status. Reverted changes.",
+        variant: "destructive",
+      });
+    },
     onSuccess: () => {
+      // We still invalidate to ensure eventual consistency
+      // But user sees the change instantly via onMutate
       queryClient.invalidateQueries({ queryKey: ["/api/todos"] });
       invalidateGamification();
     },
