@@ -1,13 +1,11 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import * as vite from "vite";
 import { type Server } from "http";
-import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
 
-const { createServer: createViteServer, createLogger } = vite as any;
-const viteLogger = createLogger();
+// Vite is loaded dynamically inside setupVite to avoid requiring dev-only deps in production.
+let viteLogger: any;
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -21,6 +19,12 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+  // Lazy load Vite and config so production (Render) doesn't need dev-only packages.
+  const viteModule = await import("vite");
+  const viteConfig = (await import("../vite.config")).default;
+  const { createServer: createViteServer, createLogger } = viteModule as any;
+  viteLogger = viteLogger ?? createLogger();
+
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
