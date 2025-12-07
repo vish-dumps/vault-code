@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Router, type Response } from "express";
 import { z } from "zod";
 import { Types } from "mongoose";

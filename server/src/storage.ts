@@ -129,10 +129,6 @@ export class MemStorage implements IStorage {
       xpVisibility: insertUser.xpVisibility ?? "public",
       showProgressGraphs: insertUser.showProgressGraphs ?? true,
       streakReminders: insertUser.streakReminders ?? true,
-      autoApplyStreakFreeze: insertUser.autoApplyStreakFreeze ?? false,
-      rewardsInventory: insertUser.rewardsInventory ?? [],
-      rewardEffects: insertUser.rewardEffects ?? [],
-      lastRewardXpCheckpoint: insertUser.lastRewardXpCheckpoint ?? 0,
     };
     this.users.set(id, user);
     return user;

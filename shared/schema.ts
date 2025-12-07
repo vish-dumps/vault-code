@@ -99,63 +99,75 @@ export const snippets = pgTable("snippets", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Insert schemas
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
-  createdAt: true,
-  lastResetDate: true,
-}).extend({
-  handle: z.string().min(4).max(48).optional(),
-  displayName: z.string().max(80).optional(),
-  bio: z.string().max(512).optional(),
-  college: z.string().max(120).optional(),
-  profileVisibility: z.enum(["public", "friends"]).optional(),
-  hideFromLeaderboard: z.boolean().optional(),
-  badgesEarned: z.array(z.string()).optional(),
-  bookmarkedAnswerIds: z.array(z.string()).optional(),
-  password: z.string().min(6).optional(),
-  friendRequestPolicy: z.enum(["anyone", "auto_mutual", "disabled"]).optional(),
-  searchVisibility: z.enum(["public", "hidden"]).optional(),
-  notificationPreferences: z
-    .object({
-      friendRequests: z.boolean().optional(),
-      activityVisibility: z.enum(["friends", "private"]).optional(),
-    })
-    .optional(),
-  xpVisibility: z.enum(["public", "private"]).optional(),
-  showProgressGraphs: z.boolean().optional(),
-  streakReminders: z.boolean().optional(),
-  autoApplyStreakFreeze: z.boolean().optional(),
-  rewardsInventory: z.any().optional(),
-  rewardEffects: z.any().optional(),
-  lastRewardXpCheckpoint: z.number().int().optional(),
-});
+// Insert schemas (loosened typing to keep runtime validation while avoiding TS regressions)
+const baseInsertUserSchema: any = createInsertSchema(users);
+export const insertUserSchema = baseInsertUserSchema
+  .omit({
+    id: true,
+    createdAt: true,
+    lastResetDate: true,
+  })
+  .extend({
+    handle: z.string().min(4).max(48).optional(),
+    displayName: z.string().max(80).optional(),
+    bio: z.string().max(512).optional(),
+    college: z.string().max(120).optional(),
+    profileVisibility: z.enum(["public", "friends"]).optional(),
+    hideFromLeaderboard: z.boolean().optional(),
+    badgesEarned: z.array(z.string()).optional(),
+    bookmarkedAnswerIds: z.array(z.string()).optional(),
+    password: z.string().min(6).optional(),
+    friendRequestPolicy: z.enum(["anyone", "auto_mutual", "disabled"]).optional(),
+    searchVisibility: z.enum(["public", "hidden"]).optional(),
+    notificationPreferences: z
+      .object({
+        friendRequests: z.boolean().optional(),
+        activityVisibility: z.enum(["friends", "private"]).optional(),
+      })
+      .optional(),
+    xpVisibility: z.enum(["public", "private"]).optional(),
+    showProgressGraphs: z.boolean().optional(),
+    streakReminders: z.boolean().optional(),
+    autoApplyStreakFreeze: z.boolean().optional(),
+    rewardsInventory: z.any().optional(),
+    rewardEffects: z.any().optional(),
+    lastRewardXpCheckpoint: z.number().int().optional(),
+  });
 
-export const insertQuestionSchema = createInsertSchema(questions).omit({
-  id: true,
-  dateSaved: true,
-  userId: true,
-}).extend({
-  tags: z.array(z.string()).optional(),
-  approaches: z.array(z.object({
-    name: z.string(),
-    language: z.string(),
-    code: z.string(),
-    notes: z.string().optional(),
-  })).optional(),
-  source: z.enum(["manual", "auto"]).optional(),
-  problemId: z.string().min(1).optional(),
-  solvedAt: z.coerce.date().optional(),
-  xpAwarded: z.number().int().optional(),
-});
+const baseInsertQuestionSchema: any = createInsertSchema(questions);
+export const insertQuestionSchema = baseInsertQuestionSchema
+  .omit({
+    id: true,
+    dateSaved: true,
+    userId: true,
+  })
+  .extend({
+    tags: z.array(z.string()).optional(),
+    approaches: z
+      .array(
+        z.object({
+          name: z.string(),
+          language: z.string(),
+          code: z.string(),
+          notes: z.string().optional(),
+        }),
+      )
+      .optional(),
+    source: z.enum(["manual", "auto"]).optional(),
+    problemId: z.string().min(1).optional(),
+    solvedAt: z.coerce.date().optional(),
+    xpAwarded: z.number().int().optional(),
+  });
 
-export const insertApproachSchema = createInsertSchema(approaches).omit({
+const baseInsertApproachSchema: any = createInsertSchema(approaches);
+export const insertApproachSchema = baseInsertApproachSchema.omit({
   id: true,
   createdAt: true,
   questionId: true,
 });
 
-export const insertSnippetSchema = createInsertSchema(snippets).omit({
+const baseInsertSnippetSchema: any = createInsertSchema(snippets);
+export const insertSnippetSchema = baseInsertSnippetSchema.omit({
   id: true,
   createdAt: true,
   userId: true,
@@ -165,20 +177,44 @@ export const updateQuestionSchema = insertQuestionSchema.partial();
 export const updateApproachSchema = insertApproachSchema.partial();
 
 // Select types
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertUser = Partial<User> & {
+  username: string;
+  password?: string;
+  email?: string;
+  handle?: string;
+};
 
 type DbQuestion = typeof questions.$inferSelect;
 export type Question = Omit<DbQuestion, "id"> & { id: number | string };
-export type InsertQuestion = z.infer<typeof insertQuestionSchema>;
-export type UpdateQuestion = z.infer<typeof updateQuestionSchema>;
+export type InsertQuestion = {
+  title: string;
+  platform: string;
+  difficulty: string;
+  link?: string | null;
+  notes?: string | null;
+  source?: "manual" | "auto" | "auto-tracker";
+  problemId?: string;
+  solvedAt?: Date;
+  xpAwarded?: number;
+  tags?: string[];
+  approaches?: InsertApproach[];
+  userId?: string;
+};
+export type UpdateQuestion = Partial<InsertQuestion>;
 
 type DbApproach = typeof approaches.$inferSelect;
 export type Approach = Omit<DbApproach, "id" | "questionId"> & {
   id: number | string;
   questionId: number | string;
 };
-export type InsertApproach = z.infer<typeof insertApproachSchema>;
-export type UpdateApproach = z.infer<typeof updateApproachSchema>;
+export type InsertApproach = {
+  name: string;
+  language: string;
+  code: string;
+  notes?: string;
+  questionId?: number | string;
+};
+export type UpdateApproach = Partial<InsertApproach>;
 
 export type Tag = typeof tags.$inferSelect;
 type DbTopicProgress = typeof topicProgress.$inferSelect;
@@ -199,8 +235,16 @@ export type User = Omit<typeof users.$inferSelect, "notificationPreferences"> & 
   notificationPreferences?: NotificationPreferences | null;
   rewardsInventory?: RewardInventoryItem[] | null;
   rewardEffects?: RewardEffectState[] | null;
+  markAllRewardsSeen?: boolean;
 };
-export type InsertSnippet = z.infer<typeof insertSnippetSchema>;
+export type InsertSnippet = {
+  title: string;
+  language: string;
+  code: string;
+  notes?: string;
+  tags?: string[];
+  userId?: string;
+};
 
 export interface RewardInventoryItem {
   id: string;

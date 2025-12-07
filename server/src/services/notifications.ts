@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Types } from "mongoose";
 import { Notification, type NotificationType, type INotification } from "../models/Notification";
 import { notifyUser } from "./realtime";

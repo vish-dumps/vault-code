@@ -33,9 +33,8 @@ interface ActivationResult {
   definition: RewardDefinition;
   instanceId: string;
   instantXp?: number;
-   activatedEffect?: RewardEffectState;
-   reward: RewardDefinition;
-   user: User;
+  activatedEffect?: RewardEffectState | null;
+  reward?: RewardDefinition;
 }
 
 function toDate(value: Date | string | undefined | null): Date | undefined {
@@ -55,10 +54,10 @@ function cloneInventory(items: RewardInventoryItem[] | undefined | null): Reward
 function cloneEffects(effects: RewardEffectState[] | undefined | null): RewardEffectState[] {
   return Array.isArray(effects)
     ? effects.map((effect) => ({
-        ...effect,
-        activatedAt: effect.activatedAt ? new Date(effect.activatedAt) : now(),
-        expiresAt: effect.expiresAt ? new Date(effect.expiresAt) : undefined,
-      }))
+      ...effect,
+      activatedAt: effect.activatedAt ? new Date(effect.activatedAt) : now(),
+      expiresAt: effect.expiresAt ? new Date(effect.expiresAt) : undefined,
+    }))
     : [];
 }
 
@@ -132,8 +131,7 @@ export function applyRewardEffectsToXp(user: User, baseDelta: number): ApplyEffe
   const expiredEffectIds: string[] = [];
 
   for (const effect of effects.slice()) {
-    const expiresAt = toDate(effect.expiresAt);
-    if (expiresAt && expiresAt.getTime() < nowDate.getTime()) {
+    if (effect.expiresAt && new Date(effect.expiresAt).getTime() < nowDate.getTime()) {
       expiredEffectIds.push(effect.id);
       continue;
     }
@@ -141,7 +139,7 @@ export function applyRewardEffectsToXp(user: User, baseDelta: number): ApplyEffe
     if (effect.type === "double_xp" && baseDelta > 0) {
       const multiplier =
         (effect.metadata?.multiplier && Number(effect.metadata.multiplier)) || 2;
-      delta = Math.round(delta * multiplier);
+      delta = Math.round(delta * Number(multiplier));
       effect.usesRemaining = (effect.usesRemaining ?? 1) - 1;
 
       if ((effect.usesRemaining ?? 0) <= 0) {
@@ -214,22 +212,14 @@ export function activateReward(
   target.usedAt = now();
 
   let instantXp: number | undefined;
-  let activatedEffect: RewardEffectState | undefined;
   if (definition.type === "momentum_boost") {
     instantXp = definition.effect.instantXp ?? 0;
   } else {
     const effect = createEffectFromDefinition(definition, target.instanceId);
     if (effect) {
       effects.push(effect);
-      activatedEffect = effect;
     }
   }
-
-  const updatedUser: User = {
-    ...user,
-    rewardsInventory: inventory,
-    rewardEffects: effects,
-  };
 
   return {
     inventory,
@@ -238,9 +228,8 @@ export function activateReward(
     definition,
     instanceId: target.instanceId,
     instantXp,
-    activatedEffect,
+    activatedEffect: definition.type !== "momentum_boost" ? createEffectFromDefinition(definition, target.instanceId) : undefined,
     reward: definition,
-    user: updatedUser,
   };
 }
 
@@ -255,15 +244,11 @@ export function buildRewardOverview(user: User) {
       const definition =
         getRewardDefinition(item.instanceId) ?? getRewardDefinition(item.rewardId);
       if (!definition) return null;
-      const instanceIndex =
-        typeof item.metadata?.instanceIndex === "number"
-          ? item.metadata.instanceIndex
-          : undefined;
       return buildSummary(
         definition,
         item.instanceId,
         Number(item.metadata?.xpThreshold ?? 0),
-        instanceIndex,
+        item.metadata?.instanceIndex ? Number(item.metadata.instanceIndex) : undefined,
         item
       );
     })
@@ -275,15 +260,11 @@ export function buildRewardOverview(user: User) {
         getRewardDefinition(effect.instanceId) ?? getRewardDefinition(effect.rewardId);
       if (!definition) return null;
       const metadata = inventory.find((item) => item.instanceId === effect.instanceId);
-      const instanceIndex =
-        typeof metadata?.metadata?.instanceIndex === "number"
-          ? metadata.metadata.instanceIndex
-          : undefined;
       return buildSummary(
         definition,
         effect.instanceId,
         Number(metadata?.metadata?.xpThreshold ?? 0),
-        instanceIndex,
+        metadata?.metadata?.instanceIndex ? Number(metadata.metadata.instanceIndex) : undefined,
         metadata,
         effect
       );

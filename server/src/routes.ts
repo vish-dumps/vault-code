@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { Types } from "mongoose";
@@ -701,7 +700,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const question = await mongoStorage.getQuestion(id, userId);
 
       if (!question) {
-        return res.status(404).json({ error: "Question not found" });
+        res.status(404).json({ error: "Question not found" });
+        return;
       }
 
       res.json(question);
@@ -827,30 +827,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await activateReward(user, instanceId);
 
       // Persist the changes
+      if (!result) {
+        res.status(400).json({ error: "Failed to activate reward" });
+        return;
+      }
+
       await mongoStorage.updateUser(userId, {
-        rewardsInventory: result.user.rewardsInventory,
-        markAllRewardsSeen: true,
+        rewardsInventory: result.inventory,
+        rewardEffects: result.effects,
       });
 
       // Maintain internal consistency if needed (e.g. apply XP side effects)
-      if (result.instantXp > 0) {
-        await applyXp(userId, result.instantXp, {}, result.user);
+      if (result.instantXp && result.instantXp > 0) {
+        // user object is not in result, pass undefined or fetch if strictly needed, 
+        // but applyXp fetches user if not provided. 
+        // However, we just updated the user in mongoStorage above.
+        // Let's rely on applyXp refetching or pass the partial updates we know.
+        // Actually applyXp takes 'baseUser'. 
+        // We can pass 'user' (from line 813 context) but it is stale regarding inventory/effects.
+        // Ideally we pass nothing and let it fetch, or pass current state.
+        // Let's pass undefined for baseUser to let it fetch fresh.
+        await applyXp(userId, result.instantXp);
       }
 
-      // If effect was added (e.g., streak freeze active), persist it
-      if (result.activatedEffect) {
-        const currentEffects = user.rewardEffects || [];
-        const existingIndex = currentEffects.findIndex(e => e.instanceId === instanceId && e.type === result.activatedEffect!.type);
-
-        let newEffects = [...currentEffects];
-        if (existingIndex > -1) {
-          newEffects[existingIndex] = result.activatedEffect;
-        } else {
-          newEffects.push(result.activatedEffect);
-        }
-
-        await mongoStorage.updateUser(userId, { rewardEffects: newEffects });
-      }
+      // If effect was added (e.g., streak freeze active), it is already in result.effects which we saved.
 
       res.json({
         success: true,
@@ -1648,7 +1648,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await mongoStorage.getUser(userId);
 
       if (!user) {
-        return res.status(404).json({ error: "User not found" });
+        res.status(404).json({ error: "User not found" });
+        return;
       }
 
       const today = new Date();
@@ -2190,7 +2191,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await mongoStorage.updateUser(userId, updateData);
 
       if (!user) {
-        return res.status(404).json({ error: "User not found" });
+        res.status(404).json({ error: "User not found" });
+        return;
       }
 
       res.json(user);
@@ -2220,7 +2222,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = req.body;
 
       if (!rating || !feedbackText) {
-        return res.status(400).json({ error: "Rating and feedback text are required" });
+        res.status(400).json({ error: "Rating and feedback text are required" });
+        return;
       }
 
       const feedback = new Feedback({
