@@ -19,22 +19,21 @@ This guide outlines the steps to deploy your full-stack application. We will dep
     *   **Name**: Choose a name (e.g., `codevault-backend`).
     *   **Region**: Select a region close to you.
     *   **Branch**: `main` (or your working branch).
-    *   **Root Directory**: Leave blank (default).
+    *   **Root Directory**: Leave blank (default to repository root).
     *   **Runtime**: `Node`.
     *   **Build Command**: `npm install && npm run build`
     *   **Start Command**: `npm start`
 4.  **Environment Variables**:
     Scroll down to "Environment Variables" and add:
+    *   `PORT`: `10000` (Optional, Render default is 10000)
     *   `DATABASE_URL`: Your valid MongoDB connection string.
-    *   `SESSION_SECRET`: A long random string (e.g., generated via a password manager).
+    *   `SESSION_SECRET`: A long random string.
     *   `NODE_ENV`: `production`
 5.  **Deploy**: Click **Create Web Service**.
 
-> [!IMPORTANT]
-> **Build Error: `sh: 1: vite: not found`**
-> If you see this error, it means Render is skipping "dev dependencies" like Vite because `NODE_ENV` is set to `production`.
->
-> **Fix**: I have automatically updated your `package.json` to move `vite`, `esbuild`, and `typescript` to regular `dependencies`. This ensures they are installed even in production mode so the build command can run. You just need to push these changes to GitHub.
+> [!NOTE]
+> **Why Root Deployment?**
+> We deploy from the root because your project uses shared code in a `shared` folder. Building from the root ensures all modules are resolved correctly. The build command will build both the frontend and backend, but using `esbuild` for the server ensures a fast, bundled output.
 
 ---
 
@@ -43,7 +42,6 @@ This guide outlines the steps to deploy your full-stack application. We will dep
 1.  **Configuration**: I have added a `vercel.json` file to your project root. **You must edit this file** before deploying if you want to use the API proxy.
     *   Open `vercel.json`.
     *   Replace `https://YOUR-RENDER-BACKEND-URL.onrender.com` with the **Service URL** you got from Render in Part 1.
-    *   *Alternative*: You can also configure this using Vercel Environment Variables if you modify the code to use `VITE_API_URL`.
 
 2.  **Dashboard**: Log in to Vercel and click **Add New** -> **Project**.
 3.  **Repository**: Import your GitHub repository.
@@ -60,4 +58,4 @@ This guide outlines the steps to deploy your full-stack application. We will dep
 
 -   **White Screen on Vercel**: Check the "Output Directory" setting. It MUST be `dist/public`.
 -   **API Errors**: Check the `vercel.json` destination URL.
--   **CORS**: If making direct requests (skipping the proxy), verify `server/index.ts` has the correct `Access-Control-Allow-Origin`.
+-   **Build Failures**: Ensure you have pushed the latest `package.json` updates which consolidate all dependencies in the root.
