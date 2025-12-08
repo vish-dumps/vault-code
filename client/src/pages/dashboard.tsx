@@ -401,24 +401,7 @@ export default function Dashboard() {
         <p className="text-muted-foreground text-sm md:text-base">Let&rsquo;s make today count. Keep building your coding skills!</p>
       </motion.div>
 
-      <div className="flex justify-end mb-2 gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          className="bg-white/60 dark:bg-slate-900/60 backdrop-blur border-cyan-200/60 dark:border-slate-800/80"
-          onClick={handleTestAchievement}
-        >
-          Test achievement popup (temp)
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="bg-white/60 dark:bg-slate-900/60 backdrop-blur border-rose-200/60 dark:border-rose-900/80"
-          onClick={() => setShowStreakWarning(true)}
-        >
-          Test streak popup (temp)
-        </Button>
-      </div>
+
 
       {/* Main Grid Layout */}
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">

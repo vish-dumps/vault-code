@@ -121,24 +121,26 @@ app.use((req, res, next) => {
 
   const upgradeListeners = server.listeners("upgrade");
   const viteUpgradeListener = upgradeListeners.find((fn) => fn.name === "hmrServerWsListener");
-  const otherUpgradeListeners = upgradeListeners.filter((fn) => fn !== viteUpgradeListener);
 
-  server.removeAllListeners("upgrade");
-  server.on("upgrade", (req, socket, head) => {
-    const protocolHeader = req.headers["sec-websocket-protocol"];
-    const protocols = protocolHeader
-      ?.split(",")
-      .map((value) => value.trim());
+  if (viteUpgradeListener) {
+    const otherUpgradeListeners = upgradeListeners.filter((fn) => fn !== viteUpgradeListener);
+    server.removeAllListeners("upgrade");
+    server.on("upgrade", (req, socket, head) => {
+      const protocolHeader = req.headers["sec-websocket-protocol"];
+      const protocols = protocolHeader
+        ?.split(",")
+        .map((value) => value.trim());
 
-    if (protocols?.includes("vite-hmr") && viteUpgradeListener) {
-      viteUpgradeListener.call(server, req, socket, head);
-      return;
-    }
+      if (protocols?.includes("vite-hmr") && viteUpgradeListener) {
+        viteUpgradeListener.call(server, req, socket, head);
+        return;
+      }
 
-    for (const listener of otherUpgradeListeners) {
-      listener.call(server, req, socket, head);
-    }
-  });
+      for (const listener of otherUpgradeListeners) {
+        listener.call(server, req, socket, head);
+      }
+    });
+  }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
