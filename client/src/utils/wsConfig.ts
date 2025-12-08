@@ -9,7 +9,7 @@ export interface WebSocketConfig {
   host: string;
 }
 
-const DEFAULT_PROD_BACKEND = "https://codevault-backend.onrender.com";
+const DEFAULT_PROD_BACKEND = "https://codevault-backend-tpqh.onrender.com";
 const DEFAULT_DEV_BACKEND = "http://localhost:5001";
 
 function isLocalhost(value?: string) {

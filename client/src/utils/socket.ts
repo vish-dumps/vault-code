@@ -1,6 +1,6 @@
 import { io, Socket } from "socket.io-client";
 
-const DEFAULT_PROD_BACKEND = "https://codevault-backend.onrender.com";
+const DEFAULT_PROD_BACKEND = "https://codevault-backend-tpqh.onrender.com";
 const DEFAULT_DEV_BACKEND = "http://localhost:5001";
 
 let socketInstance: Socket | null = null;
