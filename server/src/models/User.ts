@@ -1,9 +1,9 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema, type Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
 
 export interface IUser extends Document {
-  _id: string;
+  _id: Types.ObjectId;
   username: string;
   handle: string;
   email: string;
@@ -403,7 +403,6 @@ UserSchema.methods.comparePassword = async function (candidatePassword: string):
 };
 
 export const User = mongoose.model<IUser>('User', UserSchema);
-
 
 
 

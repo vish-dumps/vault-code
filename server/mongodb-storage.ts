@@ -53,23 +53,23 @@ export interface IStorage {
 
 export class MongoStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    const user = await UserModel.findById(id).select('-password').lean();
+    const user = await UserModel.findById(id).select('-password');
     return user ? this.mapUserToSchema(user) : undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const user = await UserModel.findOne({ username }).select('-password').lean();
+    const user = await UserModel.findOne({ username }).select('-password');
     return user ? this.mapUserToSchema(user) : undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const user = await UserModel.findOne({ email }).select('-password').lean();
+    const user = await UserModel.findOne({ email }).select('-password');
     return user ? this.mapUserToSchema(user) : undefined;
   }
 
   async getUserByHandle(handle: string): Promise<User | undefined> {
     const sanitized = sanitizeHandle(handle);
-    const user = await UserModel.findOne({ handle: sanitized.toLowerCase() }).select('-password').lean();
+    const user = await UserModel.findOne({ handle: sanitized.toLowerCase() }).select('-password');
     return user ? this.mapUserToSchema(user) : undefined;
   }
 
@@ -330,7 +330,7 @@ export class MongoStorage implements IStorage {
         { source: { $exists: false } },
         { source: { $in: [null, "", "manual"] } },
       ],
-    }).lean();
+    });
     const questionsWithDetails: QuestionWithDetails[] = [];
 
     for (const question of questions) {
@@ -346,7 +346,7 @@ export class MongoStorage implements IStorage {
   }
 
   async getQuestion(id: string, userId: string): Promise<QuestionWithDetails | undefined> {
-    const question = await QuestionModel.findOne({ _id: id, userId }).lean();
+    const question = await QuestionModel.findOne({ _id: id, userId });
     if (!question) return undefined;
 
     const approaches = await ApproachModel.find({ questionId: id });
@@ -379,8 +379,7 @@ export class MongoStorage implements IStorage {
       source: { $in: ["auto", "auto-tracker"] },
     })
       .sort({ solvedAt: -1, dateSaved: -1 })
-      .limit(limit)
-      .lean();
+      .limit(limit);
 
     const results: QuestionWithDetails[] = [];
     for (const question of questions) {
@@ -518,7 +517,7 @@ export class MongoStorage implements IStorage {
   }
 
   async getTopicProgress(userId: string): Promise<TopicProgress[]> {
-    const progress = await TopicProgressModel.find({ userId }).lean();
+    const progress = await TopicProgressModel.find({ userId });
     return progress.map(this.mapTopicProgressToSchema);
   }
 
@@ -531,7 +530,7 @@ export class MongoStorage implements IStorage {
   }
 
   async getSnippets(userId: string): Promise<Snippet[]> {
-    const snippets = await SnippetModel.find({ userId }).lean();
+    const snippets = await SnippetModel.find({ userId });
     return snippets.map(this.mapSnippetToSchema);
   }
 

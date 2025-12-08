@@ -1,7 +1,7 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Schema, type Types } from 'mongoose';
 
-export interface IApproach extends Document {
-  _id: string;
+export interface IApproach {
+  _id: Types.ObjectId;
   questionId: string;
   name: string;
   language: string;

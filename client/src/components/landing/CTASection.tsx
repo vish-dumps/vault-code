@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 
 export function CTASection() {
     return (
-        <section className="bg-gradient-to-b from-[#041426] to-[#0f2e4a] text-center pt-20 pb-32 relative overflow-hidden">
+        <section className="bg-gradient-to-b from-[#041426] to-[#0f2e4a] text-center py-9 mt-[-10px] relative overflow-hidden min-h-[250px] flex items-center justify-center">
             <div className="container mx-auto max-w-3xl relative z-10">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full bg-cyan-500/10 blur-[100px] rounded-full -z-10 pointer-events-none"></div>
 
@@ -50,15 +50,27 @@ export function CTASection() {
                     viewport={{ once: true }}
                     className="mt-16 flex justify-center pointer-events-none"
                 >
-                    <div className="relative">
-                        <img src="/kody/kody.png" alt="Kody" className="w-40 h-40 object-contain drop-shadow-2xl" />
-                        <div className="absolute -right-24 top-10 transform rotate-12">
+                    <div className="relative relative flex items-center justify-center w-full max-w-[700px]">
+                        <img src="/kody/kody.png" alt="Kody" className="absolute left-[-200px] top-[-80px] w-56 h-56 object-contain drop-shadow-2xl scale-[3.3]" />
+                        {/* <div className="absolute -right-24 top-10 transform rotate-12">
                             <div className="bg-white text-black font-handwriting px-4 py-2 rounded-lg shadow-xl font-bold animate-bounce">
                                 Let's Code! 🚀
                             </div>
                             <div className="w-0 h-0 border-l-[10px] border-l-transparent border-t-[15px] border-t-white border-r-[10px] border-r-transparent absolute -left-2 top-4 -rotate-90"></div>
-                        </div>
+                        </div> */}
                     </div>
+                    <div className="relative relative flex items-center justify-center w-full max-w-[700px]">
+                        <div className="absolute right-[-130px] bottom-[10px] scale-x-[-1]">
+                            <img src="/kody/kody.png" alt="Kody" className="w-56 h-56 object-contain drop-shadow-2xl scale-[2] " /></div>
+
+                        {/* <div className="absolute -right-24 top-10 transform rotate-12">
+                            <div className="bg-white text-black font-handwriting px-4 py-2 rounded-lg shadow-xl font-bold animate-bounce">
+                                Let's Code! 🚀
+                            </div>
+                            <div className="w-0 h-0 border-l-[10px] border-l-transparent border-t-[15px] border-t-white border-r-[10px] border-r-transparent absolute -left-2 top-4 -rotate-90"></div>
+                        </div> */}
+                    </div>
+
                 </motion.div>
             </div>
         </section>

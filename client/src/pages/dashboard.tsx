@@ -1,21 +1,16 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
-import { CheckCircle, TrendingUp, Plus, Trash2, CheckSquare, Settings, GripVertical, Clock, Circle } from "lucide-react";
+
+import { CheckCircle, TrendingUp, Settings } from "lucide-react";
 import { FloatingActionButton } from "@/components/floating-action-button";
-import { MotivationQuote } from "@/components/motivation-quote";
 import { GoalSettingsDialog } from "@/components/goal-settings-dialog";
-import { StreakCalendar } from "@/components/streak-calendar";
 import { WeeklyActivityGraph } from "@/components/weekly-activity-graph";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/components/theme-provider";
+
 import { toTitleCase } from "@/lib/text";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { QuestionWithDetails, TopicProgress } from "@shared/schema";
 import { ExternalStatsCard } from "@/components/dashboard/ExternalStatsCard";
 import { TodoListCard } from "@/components/dashboard/TodoListCard";
+import { KodyPopup } from "@/components/kody-popup";
 
 interface Todo {
   id: string;
@@ -35,10 +31,10 @@ interface Todo {
 }
 
 export default function Dashboard() {
-  const [, setLocation] = useLocation();
+  /* const [, setLocation] = useLocation(); -> removed unused */
   const { user } = useAuth();
   const { toast } = useToast();
-  const { theme } = useTheme();
+  /* const { theme } = useTheme(); -> removed unused */
   // Removed local state for newTodoTitle, todoFilter, draggedTodo as they are handled in the component
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const [goalDialogType, setGoalDialogType] = useState<"daily" | "streak">("daily");
@@ -194,8 +190,7 @@ export default function Dashboard() {
 
   // Update todo retention mutation
   const updateRetentionMutation = useMutation({
-    mutationFn: async ({ id, days }: { id: string; days: number | null }) => {
-      const retainUntil = days ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
+    mutationFn: async ({ id, retainUntil }: { id: string; retainUntil: Date | null }) => {
       const response = await apiRequest("PATCH", `/api/todos/${id}`, { retainUntil });
       return response.json();
     },
@@ -249,11 +244,7 @@ export default function Dashboard() {
   endOfDay.setHours(23, 59, 59, 999);
   const hoursLeftInDay = (endOfDay.getTime() - now.getTime()) / (1000 * 60 * 60);
   const isLateWarning = !hasStartedToday && hoursLeftInDay <= 4;
-  const statsBackgroundImage = theme === "light" ? "/kody/kody-stats-light.png" : "/kody/kody-stats.png";
 
-  const statCardSurface = theme === "light"
-    ? "bg-white/80 border-white/70 text-slate-900 shadow-md"
-    : "bg-slate-900/70 border-white/10 text-slate-50 backdrop-blur";
 
   const handleTestAchievement = () => {
     setAchievementMessage("Preview: this is how the celebration will look in production.");
@@ -410,7 +401,7 @@ export default function Dashboard() {
         <p className="text-muted-foreground text-sm md:text-base">Let&rsquo;s make today count. Keep building your coding skills!</p>
       </motion.div>
 
-      <div className="flex justify-end mb-2">
+      <div className="flex justify-end mb-2 gap-2">
         <Button
           size="sm"
           variant="outline"
@@ -418,6 +409,14 @@ export default function Dashboard() {
           onClick={handleTestAchievement}
         >
           Test achievement popup (temp)
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="bg-white/60 dark:bg-slate-900/60 backdrop-blur border-rose-200/60 dark:border-rose-900/80"
+          onClick={() => setShowStreakWarning(true)}
+        >
+          Test streak popup (temp)
         </Button>
       </div>
 
@@ -675,7 +674,7 @@ export default function Dashboard() {
               onToggle={(id, completed) => toggleTodoMutation.mutate({ id, completed })}
               onDelete={(id) => deleteTodoMutation.mutate(id)}
               onReorder={(ids) => reorderTodosMutation.mutate(ids)}
-              onUpdateRetention={(id, days) => updateRetentionMutation.mutate({ id, days })}
+              onUpdateRetention={(id, retainUntil) => updateRetentionMutation.mutate({ id, retainUntil })}
             />
           </div>
         </div>
@@ -707,69 +706,19 @@ export default function Dashboard() {
         }}
       />
 
-      <Dialog open={showAchievementModal} onOpenChange={setShowAchievementModal}>
-        <DialogContent className="max-w-md border-none bg-gradient-to-br from-amber-50 via-orange-100 to-yellow-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-foreground shadow-2xl overflow-hidden">
-          <div className="relative">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(255,210,140,0.45),transparent_40%),radial-gradient(circle_at_70%_70%,rgba(255,138,76,0.35),transparent_45%)] blur-2xl" />
-            <div className="absolute -inset-8 bg-[conic-gradient(from_45deg,rgba(255,255,255,0.12),rgba(255,186,73,0.4),rgba(255,255,255,0.12))] animate-pulse opacity-70" />
-            <div className="relative flex flex-col items-center gap-4 text-center">
-              <div className="relative h-40 w-40">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.55),transparent_60%)] blur-2xl" />
-                <img src="/kody/kody-excited.png" alt="Celebration Kody" className="relative h-full w-full object-contain drop-shadow-2xl" />
-              </div>
-              <DialogHeader className="space-y-1">
-                <DialogTitle className="text-2xl font-black">Achievement unlocked!</DialogTitle>
-                <DialogDescription className="text-sm text-muted-foreground">
-                  {achievementMessage || "You just hit a new milestone. Keep stacking those wins!"}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex items-center gap-3">
-                <Button onClick={() => setShowAchievementModal(false)} className="bg-gradient-to-r from-amber-500 to-pink-500 text-white shadow-lg hover:brightness-110">
-                  Keep going
-                </Button>
-                <Button variant="outline" onClick={() => setShowAchievementModal(false)}>
-                  Close
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <KodyPopup
+        variant="achievement"
+        message={achievementMessage || "You just hit a new milestone. Keep stacking those wins!"}
+        isVisible={showAchievementModal}
+        onClose={() => setShowAchievementModal(false)}
+      />
 
-      <Dialog open={showStreakWarning} onOpenChange={setShowStreakWarning}>
-        <DialogContent className="max-w-md border-none bg-gradient-to-b from-rose-50 via-amber-50 to-white dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-foreground shadow-2xl overflow-hidden">
-          <div className="relative">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,138,128,0.35),transparent_42%),radial-gradient(circle_at_80%_80%,rgba(255,188,109,0.35),transparent_45%)] blur-2xl" />
-            <div className="absolute inset-0 bg-[conic-gradient(from_0deg,rgba(255,167,167,0.25),rgba(255,207,124,0.4),rgba(255,167,167,0.25))] opacity-60" />
-            <div className="relative flex flex-col items-center gap-3 text-center">
-              <div className="relative h-36 w-36">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.6),transparent_62%)] blur-xl" />
-                <img src="/kody/kody-sad.png" alt="Streak warning" className="relative h-full w-full object-contain drop-shadow-xl" />
-              </div>
-              <DialogHeader className="space-y-1">
-                <DialogTitle className="text-xl font-black">Streak at risk</DialogTitle>
-                <DialogDescription className="text-sm text-muted-foreground">
-                  Clock&rsquo;s ticking. Solve one problem before midnight to keep the fire alive.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={() => {
-                    setShowStreakWarning(false);
-                    setLocation("/questions");
-                  }}
-                  className="bg-gradient-to-r from-rose-500 to-amber-500 text-white shadow-lg hover:brightness-110"
-                >
-                  Go solve now
-                </Button>
-                <Button variant="outline" onClick={() => setShowStreakWarning(false)}>
-                  Dismiss
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <KodyPopup
+        variant="streak-warning"
+        message="Clock's ticking. Solve one problem before midnight to keep the fire alive."
+        isVisible={showStreakWarning}
+        onClose={() => setShowStreakWarning(false)}
+      />
     </div>
   );
 }

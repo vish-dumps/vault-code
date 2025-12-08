@@ -4,16 +4,33 @@ let socketInstance: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socketInstance) {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5001";
-    const token = localStorage.getItem("authToken") ?? localStorage.getItem("token");
+    let backendUrl = import.meta.env.VITE_BACKEND_URL;
 
-    console.log("[Socket] Initializing with URL:", backendUrl);
+    // In production, ignore localhost backend URL (likely from local .env)
+    if (import.meta.env.PROD && backendUrl && (backendUrl.includes("localhost") || backendUrl.includes("127.0.0.1"))) {
+      backendUrl = undefined;
+    }
+
+    // Fallback to localhost default ONLY if not in production and no env var
+    if (!backendUrl && !import.meta.env.PROD) {
+      backendUrl = "http://localhost:5001";
+    }
+
+    const connectionUrl = backendUrl || undefined;
+
+    console.log("[Socket] Initializing with URL:", connectionUrl || "window.location");
     console.log("[Socket] Path: /socket.io/meet-rooms");
-    console.log("[Socket] Token present:", !!token);
 
-    socketInstance = io(backendUrl, {
+    // Use callback for auth to ensure latest token is always used on connection/reconnection
+    const authPayload = (cb: (data: object) => void) => {
+      const currentToken = localStorage.getItem("authToken") ?? localStorage.getItem("token");
+      console.log("[Socket] Authenticating with token present:", !!currentToken);
+      cb({ token: currentToken });
+    };
+
+    socketInstance = io(connectionUrl, {
       path: "/socket.io/meet-rooms",
-      auth: { token },
+      auth: authPayload,
       transports: ["polling", "websocket"],
       upgrade: false,
       reconnection: true,

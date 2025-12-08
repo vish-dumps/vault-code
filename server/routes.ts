@@ -43,7 +43,7 @@ import { computeWeeklyLeaderboard } from "./services/leaderboard";
 import { createAnswerRouter } from "./controllers/answers";
 import { createSocialRouter } from "./controllers/social";
 import { createNotificationsRouter } from "./controllers/notifications";
-import { hasConfiguredSmtp, sendEmailThroughSmtp } from "./services/email";
+import { hasConfiguredEmail, sendGenericEmail } from "./services/email";
 import { createActivity } from "./services/activity";
 import {
   applyRewardEffectsToXp,
@@ -150,8 +150,8 @@ async function ensureDailyProgressForToday(userId: string, user?: User | undefin
 
 // Email configuration for feedback
 async function sendFeedbackEmail(feedback: any) {
-  if (!hasConfiguredSmtp()) {
-    throw new Error("SMTP email transport is not configured. Cannot send feedback email.");
+  if (!hasConfiguredEmail()) {
+    throw new Error("Email transport is not configured. Cannot send feedback email.");
   }
 
   const receiverEmail = process.env.FEEDBACK_RECEIVER_EMAIL || "vishwasthesoni@gmail.com";
@@ -179,12 +179,12 @@ async function sendFeedbackEmail(feedback: any) {
     `,
   };
 
-  await sendEmailThroughSmtp(mailOptions);
+  await sendGenericEmail({ ...mailOptions, from: undefined });
 }
 
 // Send thank you email to user after feedback submission
 async function sendThankYouEmail(userEmail: string, username: string, rating: number) {
-  if (!hasConfiguredSmtp() || !userEmail) {
+  if (!hasConfiguredEmail() || !userEmail) {
     return;
   }
 
@@ -241,7 +241,7 @@ async function sendThankYouEmail(userEmail: string, username: string, rating: nu
     `,
   };
 
-  await sendEmailThroughSmtp(mailOptions);
+  await sendGenericEmail({ ...mailOptions, from: undefined });
 }
 
 const solvedProblemPayloadSchema = z.object({

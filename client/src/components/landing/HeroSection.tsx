@@ -84,10 +84,10 @@ export function HeroSection() {
                     <motion.div
                         animate={{ y: [-10, 10, -10] }}
                         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                        className="absolute -top-24 -right-2 z-20 hidden lg:block pointer-events-none"
+                        className="absolute -bottom-20 -right-2 z-20 hidden lg:block pointer-events-none"
                     >
                         <div className="relative">
-                            <img src="/kody/kody.png" alt="Kody Mascot" className="w-56 h-56 translate-x-[100px] -scale-x-100 drop-shadow-2xl object-contain" />
+                            <img src="/kody/kody.gif" alt="Kody Mascot" className="w-56 h-56 translate-x-[100px] -scale-x-100 drop-shadow-2xl object-contain" />
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{ opacity: 1, scale: 1 }}

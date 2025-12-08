@@ -139,9 +139,9 @@ export function applyRewardEffectsToXp(user: User, baseDelta: number): ApplyEffe
     }
 
     if (effect.type === "double_xp" && baseDelta > 0) {
-      const multiplier =
-        (effect.metadata?.multiplier && Number(effect.metadata.multiplier)) || 2;
-      delta = Math.round(delta * multiplier);
+      const multiplier = Number(effect.metadata?.multiplier ?? 2);
+      const safeMultiplier = Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 2;
+      delta = Math.round(delta * safeMultiplier);
       effect.usesRemaining = (effect.usesRemaining ?? 1) - 1;
 
       if ((effect.usesRemaining ?? 0) <= 0) {

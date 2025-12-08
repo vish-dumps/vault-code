@@ -31,7 +31,7 @@ interface TodoListCardProps {
     onToggle: (id: string, completed: boolean) => void;
     onDelete: (id: string) => void;
     onReorder: (ids: string[]) => void;
-    onUpdateRetention: (id: string, days: number | null) => void;
+    onUpdateRetention: (id: string, retainUntil: Date | null) => void;
 }
 
 const PRESET_COLORS = [
@@ -228,11 +228,18 @@ export function TodoListCard({
 
     const handleExtension = (task: Todo) => {
         const created = new Date(task.createdAt).getTime();
-        const expires = task.retainUntil ? new Date(task.retainUntil).getTime() : created + ONE_DAY_MS;
-        const currentLevel = Math.max(0, Math.round((expires - (created + ONE_DAY_MS)) / ONE_DAY_MS));
+        const baseExpiry = created + ONE_DAY_MS;
+        const currentRetain = task.retainUntil ? new Date(task.retainUntil).getTime() : baseExpiry;
+
+        const currentLevel = Math.max(0, Math.round((currentRetain - baseExpiry) / ONE_DAY_MS));
         const nextLevel = currentLevel >= 3 ? 0 : currentLevel + 1;
-        const extraDays = nextLevel;
-        onUpdateRetention(task.id, extraDays === 0 ? null : extraDays);
+
+        if (nextLevel === 0) {
+            onUpdateRetention(task.id, null);
+        } else {
+            const targetTime = baseExpiry + (nextLevel * ONE_DAY_MS);
+            onUpdateRetention(task.id, new Date(targetTime));
+        }
     };
 
     const sortedTodos = [...todos].sort((a, b) => a.order - b.order);

@@ -1,7 +1,7 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Schema, type Types } from 'mongoose';
 
-export interface ITopicProgress extends Document {
-  _id: string;
+export interface ITopicProgress {
+  _id: Types.ObjectId;
   userId: string;
   topic: string;
   solved: number;

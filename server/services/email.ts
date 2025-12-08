@@ -50,6 +50,10 @@ export function hasConfiguredSmtp(): boolean {
   return Boolean(smtpTransporter);
 }
 
+export function hasConfiguredEmail(): boolean {
+  return Boolean(smtpTransporter || resendClient);
+}
+
 export async function sendEmailThroughSmtp(options: SendMailOptions): Promise<void> {
   if (!smtpTransporter) {
     throw new Error("SMTP transporter is not configured");
@@ -59,6 +63,57 @@ export async function sendEmailThroughSmtp(options: SendMailOptions): Promise<vo
     from: options.from ?? smtpFrom,
     ...options,
   });
+}
+
+export async function sendGenericEmail(options: SendMailOptions & { subject: string; html: string; to: string | string[] }): Promise<boolean> {
+  const { to, subject, html, from } = options;
+  const toAddress = Array.isArray(to) ? to[0] : to; // Resend usually expects single/array strings. We'll simplify for logging.
+
+  console.log(`[Email] sendGenericEmail called with to="${to}", subject="${subject}"`);
+
+  if (smtpTransporter) {
+    console.log(`[Email] Using SMTP transporter to send to: ${to}`);
+    try {
+      await sendEmailThroughSmtp(options);
+      console.log(`[Email] ✅ SMTP email sent successfully to: ${to}`);
+      return true;
+    } catch (error: unknown) {
+      console.error("[Email] ❌ Failed to send email via SMTP:", error);
+    }
+  }
+
+  if (resendClient) {
+    console.log(`[Email] Using Resend client to send to: ${to}`);
+    try {
+      // Resend expects 'to' as string | string[]
+      const resendTo = Array.isArray(to) ? to : [to as string];
+
+      const fromAddress = typeof from === 'object' && from !== null && 'address' in from
+        ? from.address
+        : (from as string | undefined);
+
+      const response = await resendClient.emails.send({
+        from: fromAddress ?? resendFrom,
+        to: resendTo,
+        subject,
+        html,
+      });
+
+      if (response && typeof response === 'object' && 'error' in response && response.error) {
+        console.error("[Email] ❌ Resend API returned error:", response.error);
+        return false;
+      }
+
+      console.log(`[Email] ✅ Resend email sent successfully to: ${to}`);
+      return true;
+    } catch (error: unknown) {
+      console.error("[Email] ❌ Failed to send email via Resend (exception):", error);
+    }
+  } else {
+    console.log("[Email] ⚠️ Resend client not available");
+  }
+
+  return false;
 }
 
 interface SendOtpOptions {

@@ -1,7 +1,7 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Schema, type Types } from 'mongoose';
 
-export interface IQuestion extends Document {
-  _id: string;
+export interface IQuestion {
+  _id: Types.ObjectId;
   userId: string;
   title: string;
   platform: string;
