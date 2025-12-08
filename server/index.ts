@@ -122,25 +122,50 @@ app.use((req, res, next) => {
   const upgradeListeners = server.listeners("upgrade");
   const viteUpgradeListener = upgradeListeners.find((fn) => fn.name === "hmrServerWsListener");
 
-  if (viteUpgradeListener) {
-    const otherUpgradeListeners = upgradeListeners.filter((fn) => fn !== viteUpgradeListener);
-    server.removeAllListeners("upgrade");
-    server.on("upgrade", (req, socket, head) => {
-      const protocolHeader = req.headers["sec-websocket-protocol"];
-      const protocols = protocolHeader
-        ?.split(",")
-        .map((value) => value.trim());
+  // Remove existing listeners to handle routing manually
+  server.removeAllListeners("upgrade");
 
-      if (protocols?.includes("vite-hmr") && viteUpgradeListener) {
-        viteUpgradeListener.call(server, req, socket, head);
+  server.on("upgrade", (req, socket, head) => {
+    const pathname = req.url ? new URL(req.url, `http://${req.headers.host}`).pathname : "";
+
+    // 1. Handle Vite HMR (Development only)
+    const protocolHeader = req.headers["sec-websocket-protocol"];
+    const protocols = protocolHeader?.split(",").map((value) => value.trim());
+    if (protocols?.includes("vite-hmr") && viteUpgradeListener) {
+      viteUpgradeListener.call(server, req, socket, head);
+      return;
+    }
+
+    // 2. Handle /ws path (Native WebSocket)
+    // Import wss dynamically or assume it's available via module scope if I add import
+    // Note: I will use the wss exported from realtime service.
+    // Since I can't easily add import statement in this Replace block without touching top of file,
+    // I will access it via require or rely on next step to add import.
+    // Actually, I should use the wss returned/available from initRealtime? 
+    // initRealtime returns nothing but sets the exported var.
+    // I will rely on importing { wss } from "./services/realtime" at top of file. 
+    // For now, I'll write the logic assuming 'wss' is available, and then add the import.
+
+    if (pathname.startsWith("/ws")) {
+      const { wss } = require("./services/realtime");
+      if (wss) {
+        wss.handleUpgrade(req, socket, head, (ws: any) => {
+          wss.emit('connection', ws, req);
+        });
         return;
       }
+    }
 
-      for (const listener of otherUpgradeListeners) {
-        listener.call(server, req, socket, head);
-      }
-    });
-  }
+    // 3. Fallback to other listeners (like socket.io) or default behavior
+    // If we removed all listeners, we need to manually call socket.io's listener if strictly necessary?
+    // Socket.io attaches its listener when initialized. If we removed *all* listeners, we removed socket.io's too!
+    // We captured 'upgradeListeners' BEFORE removing.
+    // We should call the rest of them.
+    const otherListeners = upgradeListeners.filter(fn => fn !== viteUpgradeListener);
+    for (const listener of otherListeners) {
+      listener.call(server, req, socket, head);
+    }
+  });
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.

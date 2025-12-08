@@ -9,7 +9,7 @@ interface ClientContext {
   isAlive: boolean;
 }
 
-let wss: WebSocketServer | undefined;
+export let wss: WebSocketServer | undefined;
 const connections = new Map<WebSocket, ClientContext>();
 const userSockets = new Map<string, Set<WebSocket>>();
 
@@ -88,7 +88,8 @@ function startHeartbeat() {
 }
 
 export function initRealtime(server: Server) {
-  wss = new WebSocketServer({ server, path: '/ws' });
+  // Use noServer mode so we can manually route upgrade requests in index.ts
+  wss = new WebSocketServer({ noServer: true });
 
   wss.on('connection', (socket) => {
     attachClient(socket);
@@ -156,5 +157,3 @@ export function notifyUser(userId: string, event: string, payload: unknown) {
 export function getConnectedUserIds(): string[] {
   return Array.from(userSockets.keys());
 }
-
-

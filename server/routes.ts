@@ -1878,7 +1878,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/user/rewards/:instanceId/use", async (req: AuthRequest, res) => {
+  // Handle both with and without /use suffix for robustness
+  const handleRewardActivation = async (req: AuthRequest, res: any) => {
     try {
       const userId = getUserId(req);
       const instanceId = req.params.instanceId;
@@ -1932,7 +1933,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error activating reward:", error);
       res.status(500).json({ error: "Failed to activate reward" });
     }
-  });
+  };
+
+  app.post("/api/user/rewards/:instanceId/use", handleRewardActivation);
+  app.post("/api/user/rewards/:instanceId", handleRewardActivation);
 
   // Topic progress
   app.get("/api/topics", async (req: AuthRequest, res) => {

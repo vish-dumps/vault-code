@@ -62,7 +62,7 @@ export function GamificationSummaryCard({ className }: GamificationSummaryCardPr
 
   const rewardActivation = useMutation({
     mutationFn: async (instanceId: string) => {
-      const response = await apiRequest("POST", `/api/user/rewards/${instanceId}/use`);
+      const response = await apiRequest("POST", `/api/user/rewards/${encodeURIComponent(instanceId)}/use`);
       let body: any = {};
       try {
         body = await response.json();
@@ -341,8 +341,8 @@ export function GamificationSummaryCard({ className }: GamificationSummaryCardPr
                           expiresAtRaw instanceof Date
                             ? expiresAtRaw
                             : expiresAtRaw
-                            ? new Date(expiresAtRaw)
-                            : null;
+                              ? new Date(expiresAtRaw)
+                              : null;
                         const expiresLabel =
                           expiresAt && !Number.isNaN(expiresAt.getTime())
                             ? ` · Ends ${formatDistanceToNow(expiresAt, { addSuffix: true })}`

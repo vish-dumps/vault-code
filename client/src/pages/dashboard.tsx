@@ -246,10 +246,7 @@ export default function Dashboard() {
   const isLateWarning = !hasStartedToday && hoursLeftInDay <= 4;
 
 
-  const handleTestAchievement = () => {
-    setAchievementMessage("Preview: this is how the celebration will look in production.");
-    setShowAchievementModal(true);
-  };
+
   const streakGradientStops = isLateWarning
     ? { start: "#fb7185", mid: "#f43f5e", end: "#e11d48" }
     : hasStartedToday
