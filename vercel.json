@@ -2,7 +2,15 @@
     "rewrites": [
         {
             "source": "/api/:path*",
-            "destination": "https://codevault-backend-tpqh.onrender.com/api/:path*"
+            "destination": "https://codevault-backend.onrender.com/api/:path*"
+        },
+        {
+            "source": "/socket.io/:path*",
+            "destination": "https://codevault-backend.onrender.com/socket.io/:path*"
+        },
+        {
+            "source": "/ws/:path*",
+            "destination": "https://codevault-backend.onrender.com/ws/:path*"
         },
         {
             "source": "/(.*)",

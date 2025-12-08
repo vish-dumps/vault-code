@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { io, type Socket } from "socket.io-client";
+import type { Socket } from "socket.io-client";
 import { formatDistanceToNow } from "date-fns";
 import {
   ChevronLeft,
@@ -42,6 +42,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { InviteFriendsDialog } from "@/components/meet-rooms/InviteFriendsDialog";
 import { QuestionLinkDialog } from "@/components/meet-rooms/QuestionLinkDialog";
+import { getSocket } from "@/utils/socket";
 
 interface MeetRoomPageProps {
   params: {
@@ -104,8 +105,6 @@ function getCursorColors(userId: string) {
   const colorIndex = Math.abs(hash) % CURSOR_COLORS.length;
   return CURSOR_COLORS[colorIndex];
 }
-
-const SOCKET_PATH = "/socket.io/meet-rooms";
 
 type ExcalidrawAPIHandle = {
   updateScene: (scene: any) => void;
@@ -248,73 +247,70 @@ export default function MeetRoomWorkspace({ params }: MeetRoomPageProps) {
   useEffect(() => {
     if (!token || !roomId) return;
 
-    const socket = io(window.location.origin, {
-      path: SOCKET_PATH,
-      auth: { token },
-    });
+    const socket = getSocket();
     socketRef.current = socket;
 
-    socket.on("connect", () => setConnectionState("online"));
-    socket.on("disconnect", () => setConnectionState("offline"));
-    socket.on("connect_error", (error: Error) => {
+    const handleConnect = () => {
+      setConnectionState("online");
+      socket.emit("join_room", { roomId });
+    };
+
+    const handleDisconnect = () => setConnectionState("offline");
+
+    const handleConnectError = (error: Error) => {
       setConnectionState("offline");
       toast({
         title: "Realtime connection failed",
         description: error.message || "Retrying...",
         variant: "destructive",
       });
-    });
+    };
 
-    socket.emit("join_room", { roomId });
-
-    socket.on(
-      "room_state",
-      (payload: {
-        canvasData?: SceneData | null;
-        codeData?: string;
-        questionLink?: string | null;
-        members?: RoomMember[];
-      }) => {
-        if (payload.codeData !== undefined && payload.codeData !== null) {
-          setCodeValue(payload.codeData);
-        }
-        if (payload.canvasData && excalidrawAPIRef.current) {
-          const hydratedScene = rehydrateScene(payload.canvasData);
-          if (hydratedScene) {
-            excalidrawAPIRef.current.updateScene(hydratedScene);
-          }
-        }
-        if (payload.questionLink !== undefined) {
-          setQuestionLink(payload.questionLink ?? null);
-        }
-        if (Array.isArray(payload.members)) {
-          const unique = new Map(payload.members.map((member) => [member.socketId, member]));
-          setMembers(Array.from(unique.values()));
-        }
-        collaboratorsRef.current.clear();
-        refreshCollaborators();
-        setRoomEnded(false);
+    const handleRoomState = (payload: {
+      canvasData?: SceneData | null;
+      codeData?: string;
+      questionLink?: string | null;
+      members?: RoomMember[];
+    }) => {
+      if (payload.codeData !== undefined && payload.codeData !== null) {
+        setCodeValue(payload.codeData);
       }
-    );
+      if (payload.canvasData && excalidrawAPIRef.current) {
+        const hydratedScene = rehydrateScene(payload.canvasData);
+        if (hydratedScene) {
+          excalidrawAPIRef.current.updateScene(hydratedScene);
+        }
+      }
+      if (payload.questionLink !== undefined) {
+        setQuestionLink(payload.questionLink ?? null);
+      }
+      if (Array.isArray(payload.members)) {
+        const unique = new Map(payload.members.map((member) => [member.socketId, member]));
+        setMembers(Array.from(unique.values()));
+      }
+      collaboratorsRef.current.clear();
+      refreshCollaborators();
+      setRoomEnded(false);
+    };
 
-    socket.on("canvas_update", (payload: { scene: SceneData | null }) => {
+    const handleCanvasUpdate = (payload: { scene: SceneData | null }) => {
       if (payload.scene && excalidrawAPIRef.current) {
         const hydratedScene = rehydrateScene(payload.scene);
         if (hydratedScene) {
           excalidrawAPIRef.current.updateScene(hydratedScene);
         }
       }
-    });
+    };
 
-    socket.on("code_update", (payload: { code: string }) => {
+    const handleCodeUpdate = (payload: { code: string }) => {
       setCodeValue(payload.code ?? "");
-    });
+    };
 
-    socket.on("question_update", (payload: { questionLink?: string | null }) => {
+    const handleQuestionUpdate = (payload: { questionLink?: string | null }) => {
       setQuestionLink(payload.questionLink ?? null);
-    });
+    };
 
-    socket.on("cursor_update", (payload: { userId?: string; username?: string; pointer?: { x: number; y: number } | null }) => {
+    const handleCursorUpdate = (payload: { userId?: string; username?: string; pointer?: { x: number; y: number } | null }) => {
       const targetUserId = payload?.userId;
       if (!targetUserId || targetUserId === user?.id) {
         return;
@@ -329,43 +325,66 @@ export default function MeetRoomWorkspace({ params }: MeetRoomPageProps) {
         collaboratorsRef.current.delete(targetUserId);
       }
       refreshCollaborators();
-    });
+    };
 
-    socket.on(
-      "room_presence",
-      (payload: { type: "joined" | "left"; member?: RoomMember }) => {
-        if (payload.member && payload.type === "left") {
-          collaboratorsRef.current.delete(payload.member.userId);
-          refreshCollaborators();
-        }
-        if (!payload.member) return;
-        setMembers((prev) => {
-          if (payload.type === "joined") {
-            const map = new Map(prev.map((member) => [member.socketId, member]));
-            map.set(payload.member!.socketId, payload.member!);
-            return Array.from(map.values());
-          }
-          if (payload.type === "left") {
-            return prev.filter((member) => member.socketId !== payload.member!.socketId);
-          }
-          return prev;
-        });
+    const handleRoomPresence = (payload: { type: "joined" | "left"; member?: RoomMember }) => {
+      if (payload.member && payload.type === "left") {
+        collaboratorsRef.current.delete(payload.member.userId);
+        refreshCollaborators();
       }
-    );
+      if (!payload.member) return;
+      setMembers((prev) => {
+        if (payload.type === "joined") {
+          const map = new Map(prev.map((member) => [member.socketId, member]));
+          map.set(payload.member!.socketId, payload.member!);
+          return Array.from(map.values());
+        }
+        if (payload.type === "left") {
+          return prev.filter((member) => member.socketId !== payload.member!.socketId);
+        }
+        return prev;
+      });
+    };
 
-    socket.on("room_closed", () => {
+    const handleRoomClosed = () => {
       setRoomEnded(true);
       collaboratorsRef.current.clear();
       refreshCollaborators();
       toast({ title: "Room ended", description: "The host closed this live room." });
-    });
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("connect_error", handleConnectError);
+    socket.on("room_state", handleRoomState);
+    socket.on("canvas_update", handleCanvasUpdate);
+    socket.on("code_update", handleCodeUpdate);
+    socket.on("question_update", handleQuestionUpdate);
+    socket.on("cursor_update", handleCursorUpdate);
+    socket.on("room_presence", handleRoomPresence);
+    socket.on("room_closed", handleRoomClosed);
+
+    if (!socket.connected) {
+      socket.connect();
+    } else {
+      handleConnect();
+    }
 
     return () => {
       if (socketRef.current) {
         socketRef.current.emit("cursor_update", { roomId, userId: user?.id, pointer: null });
+        socketRef.current.emit("leave_room", { roomId });
       }
-      socket.removeAllListeners();
-      socket.disconnect();
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("connect_error", handleConnectError);
+      socket.off("room_state", handleRoomState);
+      socket.off("canvas_update", handleCanvasUpdate);
+      socket.off("code_update", handleCodeUpdate);
+      socket.off("question_update", handleQuestionUpdate);
+      socket.off("cursor_update", handleCursorUpdate);
+      socket.off("room_presence", handleRoomPresence);
+      socket.off("room_closed", handleRoomClosed);
       socketRef.current = null;
       collaboratorsRef.current.clear();
       refreshCollaborators();
@@ -608,7 +627,7 @@ export default function MeetRoomWorkspace({ params }: MeetRoomPageProps) {
 
             <p className="text-sm text-slate-400">
 
-              {room.createdByName ? `Hosted by ${room.createdByName}` : "Collaborative workspace"} • Updated {relativeTime}
+              {room.createdByName ? `Hosted by ${room.createdByName}` : "Collaborative workspace"} - Updated {relativeTime}
 
             </p>
 

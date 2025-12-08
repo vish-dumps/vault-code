@@ -122,14 +122,16 @@ function schedulePersist(roomId: string) {
   persistTimers.set(roomId, timer);
 }
 
-export function initMeetRoomsSocket(server: HttpServer) {
+export function initMeetRoomsSocket(server: HttpServer, allowedOrigins: string[] = []) {
   console.log("[MeetRoomsSocket] Initializing Socket.io server on path: /socket.io/meet-rooms");
+  const socketCorsOrigin = allowedOrigins.length ? allowedOrigins : "*";
 
   const io = new Server(server, {
     path: "/socket.io/meet-rooms",
     cors: {
-      origin: "*",
+      origin: socketCorsOrigin,
       methods: ["GET", "POST"],
+      credentials: true,
     },
     serveClient: false,
     transports: ['websocket', 'polling'],

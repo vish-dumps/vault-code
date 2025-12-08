@@ -1,24 +1,30 @@
 import { io, Socket } from "socket.io-client";
 
+const DEFAULT_PROD_BACKEND = "https://codevault-backend.onrender.com";
+const DEFAULT_DEV_BACKEND = "http://localhost:5001";
+
 let socketInstance: Socket | null = null;
+
+function resolveBackendUrl(): string {
+  const rawEnv = import.meta.env.VITE_BACKEND_URL?.trim();
+  const isLocalhost = (value: string) => value.includes("localhost") || value.includes("127.0.0.1");
+
+  if (rawEnv && !(import.meta.env.PROD && isLocalhost(rawEnv))) {
+    return rawEnv.replace(/\/+$/, "");
+  }
+
+  if (import.meta.env.PROD) {
+    return DEFAULT_PROD_BACKEND;
+  }
+
+  return DEFAULT_DEV_BACKEND;
+}
 
 export function getSocket(): Socket {
   if (!socketInstance) {
-    let backendUrl = import.meta.env.VITE_BACKEND_URL;
+    const connectionUrl = resolveBackendUrl();
 
-    // In production, ignore localhost backend URL (likely from local .env)
-    if (import.meta.env.PROD && backendUrl && (backendUrl.includes("localhost") || backendUrl.includes("127.0.0.1"))) {
-      backendUrl = undefined;
-    }
-
-    // Fallback to localhost default ONLY if not in production and no env var
-    if (!backendUrl && !import.meta.env.PROD) {
-      backendUrl = "http://localhost:5001";
-    }
-
-    const connectionUrl = backendUrl || undefined;
-
-    console.log("[Socket] Initializing with URL:", connectionUrl || "window.location");
+    console.log("[Socket] Initializing with URL:", connectionUrl);
     console.log("[Socket] Path: /socket.io/meet-rooms");
 
     // Use callback for auth to ensure latest token is always used on connection/reconnection
@@ -31,8 +37,7 @@ export function getSocket(): Socket {
     socketInstance = io(connectionUrl, {
       path: "/socket.io/meet-rooms",
       auth: authPayload,
-      transports: ["polling", "websocket"],
-      upgrade: false,
+      transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,

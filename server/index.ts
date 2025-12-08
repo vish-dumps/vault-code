@@ -10,8 +10,12 @@ import { initMeetRoomsSocket } from "./services/meetRoomsSocket";
 
 // Optimization: Compression
 import compression from "compression";
+import cors from "cors";
 
 const app = express();
+
+// Respect proxy headers on hosted providers (Render)
+app.set("trust proxy", 1);
 
 // Optimization: Compression
 app.use(compression());
@@ -45,18 +49,37 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false, limit: "10mb" }));
 
-// Add CORS middleware for development
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+const allowedOrigins = (process.env.CLIENT_ORIGINS || process.env.CLIENT_ORIGIN || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
+if (!allowedOrigins.length) {
+  allowedOrigins.push(
+    "http://localhost:5173",
+    "http://localhost:4173",
+    "http://localhost:3000",
+    "http://localhost:5001",
+    "https://www.code-v.me",
+    "https://code-v.me",
+    "https://codevault-backend.onrender.com"
+  );
+}
+
+const corsMiddleware = cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // Allow server-to-server and health checks
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Origin", "X-Requested-With", "Content-Type", "Accept", "Authorization"],
+  maxAge: 86400,
 });
+
+app.use(corsMiddleware);
+app.options("*", corsMiddleware);
 
 // Auth routes (no authentication required)
 app.use('/api/auth', authRoutes);
@@ -117,7 +140,7 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
   initRealtime(server);
-  initMeetRoomsSocket(server);
+  initMeetRoomsSocket(server, allowedOrigins);
 
   const upgradeListeners = server.listeners("upgrade");
   const viteUpgradeListener = upgradeListeners.find((fn) => fn.name === "hmrServerWsListener");
