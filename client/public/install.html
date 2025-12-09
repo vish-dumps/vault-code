@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Install CodeVault Smart Saver</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f9fafb;
+            color: #111827;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            max-width: 480px;
+            width: 100%;
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #111827;
+        }
+        p {
+            color: #6b7280;
+            margin-bottom: 32px;
+            line-height: 1.5;
+        }
+        .btn {
+            background-color: #2563eb;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-block;
+            transition: background-color 0.2s;
+            margin-bottom: 32px;
+        }
+        .btn:hover {
+            background-color: #1d4ed8;
+        }
+        .steps {
+            text-align: left;
+            background-color: #f3f4f6;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .step {
+            display: flex;
+            align-items: start;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        .step:last-child {
+            margin-bottom: 0;
+        }
+        .step-icon {
+            margin-right: 12px;
+            font-size: 16px;
+        }
+        code {
+            background-color: #e5e7eb;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CodeVault Smart Saver</h1>
+        <p>Save coding problems from LeetCode & Codeforces directly to your CodeVault account.</p>
+        
+        <a href="/extension/CodeVaultSmartSaver.crx" class="btn">Download Extension</a>
+
+        <div class="steps">
+            <div class="step">
+                <span class="step-icon">1️⃣</span>
+                <span>Download the <b>.crx</b> file above.</span>
+            </div>
+            <div class="step">
+                <span class="step-icon">2️⃣</span>
+                <span>Open <code>chrome://extensions</code> in a new tab.</span>
+            </div>
+            <div class="step">
+                <span class="step-icon">3️⃣</span>
+                <span>Enable <b>Developer mode</b> (top right).</span>
+            </div>
+            <div class="step">
+                <span class="step-icon">4️⃣</span>
+                <span>Drag and drop the downloaded file onto the page.</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

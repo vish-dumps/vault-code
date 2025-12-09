@@ -24,3 +24,21 @@
 ### ✨ Premium UI/UX
 - **Modern Aesthetics**: A polished interface featuring glassmorphism effects, smooth transitions, and thoughtful animations.
 - **Theme Support**: Beautifully designed Light and Dark modes with premium gradient accents.
+
+## Extension Updates
+
+To release a new version of the extension:
+
+1. **Increment Version**: Update `version` in `extension/manifest.json`.
+2. **Repackage**:
+   - Go to `chrome://extensions`.
+   - Click "Pack extension".
+   - Root directory: Select the `extension/` folder in this repo.
+   - Private key file: Select `extension/CodeVaultSmartSaver.pem`.
+   - This will generate a new `.crx` file.
+3. **Update Files**:
+   - Move the new `.crx` to `client/public/extension/CodeVaultSmartSaver.crx`.
+   - Update `version` in `client/public/extension/update.xml` to match the manifest.
+   - **Important**: Ensure `appid` in `update.xml` matches your specific Extension ID (derived from the `.pem`).
+4. **Deploy**: Push changes to redeploy the site.
+

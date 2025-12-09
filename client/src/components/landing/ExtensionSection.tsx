@@ -25,6 +25,13 @@ export function ExtensionSection() {
                             <div className="text-xs text-gray-500">Beta Support</div>
                         </div>
                     </div>
+                    <div className="pt-4">
+                        <a href="/install">
+                            <button className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 px-6 py-3 rounded-full font-bold transition-all flex items-center gap-2">
+                                Get the Extension <span aria-hidden="true">&rarr;</span>
+                            </button>
+                        </a>
+                    </div>
                 </motion.div>
 
                 {/* Browser Mockup */}

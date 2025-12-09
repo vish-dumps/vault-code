@@ -226,17 +226,32 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
               <Label htmlFor="username" className="text-slate-200">
                 Username
               </Label>
-              <Input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                minLength={3}
-                maxLength={30}
-                disabled={isLoading}
-                className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 ${palette.focusClass}`}
-              />
+              <div className="relative">
+                <Input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  minLength={3}
+                  maxLength={30}
+                  disabled={isLoading}
+                  className={`h-12 rounded-2xl border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500 pr-12 ${palette.focusClass}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const adjectives = ["Fast", "Cyber", "Tech", "Code", "Algo", "Smart", "Pixel", "Neon", "Data", "Binary"];
+                    const nouns = ["Ninja", "Coder", "Vault", "Wizard", "Titan", "Genius", "Master", "Sage", "Dev", "Owl"];
+                    const randomUser = `${adjectives[Math.floor(Math.random() * adjectives.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}${Math.floor(Math.random() * 100)}`;
+                    setUsername(randomUser);
+                  }}
+                  className="absolute inset-y-0 right-4 flex items-center text-slate-400 transition hover:text-[#0a9396]"
+                  title="Generate random username"
+                >
+                  <ShieldCheck className="h-4 w-4" /> {/* Using ShieldCheck as Wand placeholder since Wand wasn't imported, or I can import Wand */}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -280,8 +295,8 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
                   <SelectValue placeholder="Choose your avatar base" />
                 </SelectTrigger>
                 <SelectContent className={`${palette.selectBg} text-slate-100`}>
-                <SelectItem value="male">Masculine - Adventurous</SelectItem>
-                <SelectItem value="female">Feminine - Elegant</SelectItem>
+                  <SelectItem value="male">Masculine - Adventurous</SelectItem>
+                  <SelectItem value="female">Feminine - Elegant</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-slate-400">
@@ -314,6 +329,27 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              {/* Password Strength Meter */}
+              {password && (
+                <div className="space-y-1">
+                  <div className="flex h-1 w-full overflow-hidden rounded-full bg-slate-700">
+                    <div
+                      className={`h-full transition-all duration-300 ${password.length > 8 && /[A-Z]/.test(password) && /[0-9]/.test(password) ? "w-full bg-green-500" :
+                          password.length > 5 ? "w-2/3 bg-yellow-500" :
+                            "w-1/3 bg-red-500"
+                        }`}
+                    />
+                  </div>
+                  <p className={`text-xs text-right font-medium ${password.length > 8 && /[A-Z]/.test(password) && /[0-9]/.test(password) ? "text-green-500" :
+                      password.length > 5 ? "text-yellow-500" :
+                        "text-red-500"
+                    }`}>
+                    {password.length > 8 && /[A-Z]/.test(password) && /[0-9]/.test(password) ? "Strong" :
+                      password.length > 5 ? "Medium" :
+                        "Weak"}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -426,7 +462,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin, compact = false }: Re
           </div>
         )}
       </form>
-      
+
       <div className="mt-8 text-center text-sm text-slate-300">
         Already have an account?{' '}
         <button

@@ -35,11 +35,13 @@ import Support from "@/pages/support";
 import RoomPage from "@/pages/RoomPage";
 import { OnboardingTutorial } from "@/components/onboarding-tutorial";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import InstallPage from "@/pages/install";
 
 function AuthenticatedRoutes() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/install" component={InstallPage} />
       <Route path="/workspace" component={Workspace} />
       <Route path="/snippets" component={Snippets} />
       <Route path="/questions" component={Questions} />
@@ -68,6 +70,7 @@ function UnauthenticatedRoutes() {
   return (
     <Switch>
       <Route path="/" component={LandingPage} />
+      <Route path="/install" component={InstallPage} />
       <Route path="/auth" component={AuthPage} />
       <Route component={LandingPage} />
     </Switch>

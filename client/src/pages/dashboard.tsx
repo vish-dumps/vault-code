@@ -44,6 +44,28 @@ export default function Dashboard() {
   const lastSolvedCountRef = useRef<number | null>(null);
   const hasCelebratedDailyGoalRef = useRef(false);
   const hasShownStreakWarningRef = useRef(false);
+  const [showExtensionPopup, setShowExtensionPopup] = useState(false);
+
+  useEffect(() => {
+    // Persistent extension reminder: Show unless already installed (detected) or user clicks "Get Extension"
+    // Using sessionStorage to not annoy user on every single reload in same session, but will remind on new session
+    const hasSeenPopup = sessionStorage.getItem("session_extension_popup_dismissed");
+    const isInstalled = document.documentElement.getAttribute("data-codevault-installed") === "true"; // Assuming extension injects this
+
+    if (!hasSeenPopup && !isInstalled) {
+      const timer = setTimeout(() => {
+        setShowExtensionPopup(true);
+      }, 5000); // 5s delay
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const closeExtensionPopup = () => {
+    setShowExtensionPopup(false);
+    sessionStorage.setItem("session_extension_popup_dismissed", "true");
+  };
+
+
 
   // Fetch questions to calculate stats
   const { data: questions = [] } = useQuery<QuestionWithDetails[]>({
@@ -74,6 +96,23 @@ export default function Dashboard() {
     queryKey: ["/api/user/profile"],
     refetchInterval: 10000, // Faster refresh for auto-tracked questions
   });
+
+  const lastTotalXpRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // Check for XP gain
+    if (userProfile?.stats?.totalXp !== undefined) {
+      if (lastTotalXpRef.current !== null && userProfile.stats.totalXp > lastTotalXpRef.current) {
+        const xpGained = userProfile.stats.totalXp - lastTotalXpRef.current;
+        // Only show if meaningful gain (avoid hydration flickering)
+        if (xpGained > 0) {
+          setAchievementMessage(`Great job! You received +${xpGained} XP!`);
+          setShowAchievementModal(true);
+        }
+      }
+      lastTotalXpRef.current = userProfile.stats.totalXp;
+    }
+  }, [userProfile?.stats?.totalXp]);
 
   const invalidateGamification = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["/api/user/gamification"] });
@@ -390,12 +429,16 @@ export default function Dashboard() {
         className="mb-4 flex-shrink-0"
       >
         <div className="text-sm font-medium text-muted-foreground mb-1">Welcome Back,</div>
-        <h1 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-none mb-2">
-          <span className="bg-gradient-to-r from-[#ff7b00] to-[#ef233c] dark:from-[#d397fa] dark:via-[#a78bfa] dark:to-[#8364e8] bg-clip-text text-transparent animate-gradient">
-            {formattedName}
-          </span>
-        </h1>
-        <p className="text-muted-foreground text-sm md:text-base">Let&rsquo;s make today count. Keep building your coding skills!</p>
+        <div className="flex items-end justify-between w-full">
+          <div>
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-none mb-2">
+              <span className="bg-gradient-to-r from-[#ff7b00] to-[#ef233c] dark:from-[#d397fa] dark:via-[#a78bfa] dark:to-[#8364e8] bg-clip-text text-transparent animate-gradient">
+                {formattedName}
+              </span>
+            </h1>
+            <p className="text-muted-foreground text-sm md:text-base">Let&rsquo;s make today count. Keep building your coding skills!</p>
+          </div>
+        </div>
       </motion.div>
 
 
@@ -698,6 +741,14 @@ export default function Dashboard() {
         message="Clock's ticking. Solve one problem before midnight to keep the fire alive."
         isVisible={showStreakWarning}
         onClose={() => setShowStreakWarning(false)}
+      />
+
+      <KodyPopup
+        variant="extension-missing"
+        message="To automatically track your LeetCode & Codeforces progress, you need the CodeVault extension!"
+        isVisible={showExtensionPopup}
+        onClose={closeExtensionPopup}
+        actionLabel="Get Extension"
       />
     </div>
   );

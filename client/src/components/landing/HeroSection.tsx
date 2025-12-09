@@ -54,7 +54,7 @@ export function HeroSection() {
                                 Get Started Free <ArrowRight className="ml-2 w-5 h-5" />
                             </Button>
                         </Link>
-                        <Link href="/extension">
+                        <Link href="/install">
                             <Button variant="outline" size="lg" className="rounded-full h-14 px-8 text-lg font-bold bg-gray-800/50 text-orange-400 border-cyan-500/30 hover:bg-gray-700 hover:border-cyan-400 hover:text-cyan-300 transition-all duration-300 backdrop-blur-sm">
                                 <Zap className="mr-2 w-5 h-5" /> Install Extension
                             </Button>

@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "CodeVault Smart Saver",
   "version": "1.0.0",
+  "update_url": "https://code-v.me/extension/update.xml",
   "description": "Save coding problems from LeetCode & Codeforces directly to CodeVault.",
   "permissions": [
     "activeTab",

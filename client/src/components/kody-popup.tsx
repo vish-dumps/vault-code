@@ -1,16 +1,19 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { X, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useLocation } from "wouter";
 
 interface KodyPopupProps {
-    variant: "achievement" | "streak-warning";
+    variant: "achievement" | "streak-warning" | "extension-missing";
     message: string;
     isVisible: boolean;
     onClose: () => void;
     // Duration is no longer used for switching to static, but kept for interface/future compat
     duration?: number;
+    actionLabel?: string;
+    onAction?: () => void;
 }
 
 const VARIANTS = {
@@ -25,6 +28,11 @@ const VARIANTS = {
         static: "/kody/kody-sad.png",
         bubbleClass: "bg-rose-50 border-rose-200 text-rose-900 border",
     },
+    "extension-missing": {
+        gif: "/kody/kody.gif",
+        static: "/kody/kody.png",
+        bubbleClass: "bg-cyan-50 border-cyan-200 text-cyan-900 border",
+    },
 };
 
 export function KodyPopup({
@@ -32,9 +40,20 @@ export function KodyPopup({
     message,
     isVisible,
     onClose,
+    actionLabel,
+    onAction,
     duration = 2800,
 }: KodyPopupProps) {
     const config = VARIANTS[variant];
+    const [, setLocation] = useLocation();
+
+    const handleAction = () => {
+        if (onAction) {
+            onAction();
+        } else if (variant === "extension-missing") {
+            setLocation("/install");
+        }
+    };
 
     return (
         <AnimatePresence>
@@ -68,10 +87,24 @@ export function KodyPopup({
                         <p className="text-sm font-medium leading-relaxed pr-6">
                             {message}
                         </p>
+
+                        {(actionLabel || variant === "extension-missing") && (
+                            <Button
+                                size="sm"
+                                className={`mt-3 w-full border-0 shadow-sm ${variant === "extension-missing"
+                                        ? "bg-orange-500 hover:bg-orange-600 text-white"
+                                        : "bg-white/50 hover:bg-white/80 text-foreground"
+                                    }`}
+                                onClick={handleAction}
+                            >
+                                {actionLabel || "Install Now"} <ArrowRight className="ml-2 w-3 h-3" />
+                            </Button>
+                        )}
+
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-white shadow-sm border hover:bg-slate-100"
+                            className="absolute bottom-[55px] left-[270px] h-6 w-6 rounded-full bg-white/50 hover:bg-white shadow-sm border-0 transition-colors z-10"
                             onClick={onClose}
                         >
                             <X className="h-3 w-3 text-muted-foreground" />

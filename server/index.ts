@@ -5,7 +5,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { seedDummyData } from "./seedData";
 import { connectToMongoDB } from "./mongodb";
 import authRoutes from "./auth-routes";
-import { initRealtime } from "./services/realtime";
+import { initRealtime, wss } from "./services/realtime";
 import { initMeetRoomsSocket } from "./services/meetRoomsSocket";
 
 // Optimization: Compression
@@ -170,7 +170,6 @@ app.use((req, res, next) => {
     // For now, I'll write the logic assuming 'wss' is available, and then add the import.
 
     if (pathname.startsWith("/ws")) {
-      const { wss } = require("./services/realtime");
       if (wss) {
         wss.handleUpgrade(req, socket, head, (ws: any) => {
           wss.emit('connection', ws, req);

@@ -40,7 +40,7 @@ export function CTASection() {
                             Start Your Adventure <ChevronRight className="ml-2 w-6 h-6" />
                         </Button>
                     </Link>
-                    <div className="text-gray-500 text-sm">Or <a href="/extension" className="text-cyan-400 underline underline-offset-4 hover:text-cyan-300">download the extension</a> directly</div>
+                    <div className="text-gray-500 text-sm">Or <a href="/install" className="text-cyan-400 underline underline-offset-4 hover:text-cyan-300">download the extension</a> directly</div>
                 </motion.div>
 
                 <motion.div
